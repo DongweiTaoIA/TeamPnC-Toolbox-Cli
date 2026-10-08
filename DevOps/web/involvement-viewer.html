@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+  Tickets each person was involved in. Separate from viewer.html, which is unchanged.
+  Generate data:  python src/involvement.py
+  Serve:          python -m http.server 8000  ->  http://localhost:8000/web/involvement-viewer.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Team PnC - tickets involving each person</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    body { margin: 0; padding: 24px; background: #f5f6f8; color: #1b1f23;
+           font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .sub, .note { color: #57606a; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 16px;
+            margin-top: 18px; }
+    .card { background: #fff; border: 1px solid #d8dee4; border-radius: 10px; padding: 14px 16px; }
+    .card.total { grid-column: 1 / -1; }
+    .card h3 { margin: 0 0 4px; font-size: 15px; }
+    .wrap { position: relative; }
+  </style>
+</head>
+<body>
+<h1>Tickets involving each person</h1>
+<div class="sub" id="sub">Loading...</div>
+<div class="grid" id="grid"></div>
+<script>
+function render(title, note, people, host, cls) {
+  const card = document.createElement('div');
+  card.className = 'card ' + (cls || '');
+  card.innerHTML = `<h3>${title}</h3><p class="note">${note}</p><div class="wrap"><canvas></canvas></div>`;
+  card.querySelector('.wrap').style.height = Math.max(160, people.length * 26 + 60) + 'px';
+  host.appendChild(card);
+  new Chart(card.querySelector('canvas'), {
+    type: 'bar',
+    data: {
+      labels: people.map(p => p.name),
+      datasets: [
+        { label: 'Assigned to ticket', data: people.map(p => p.as_assignee), backgroundColor: '#2f6fd0' },
+        { label: 'Via tasks only', data: people.map(p => p.via_tasks_only), backgroundColor: '#e8833a' },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { tooltip: { callbacks: {
+        footer: items => `Total: ${people[items[0].dataIndex].tickets} tickets`,
+      } } },
+      scales: {
+        x: { stacked: true, beginAtZero: true, title: { display: true, text: 'Tickets' } },
+        // Show every name; Chart.js otherwise skips labels when bars are dense.
+        y: { stacked: true, ticks: { autoSkip: false } },
+      },
+    },
+  });
+}
+
+fetch('../data/involvement.json').then(r => {
+  if (!r.ok) throw new Error(`involvement.json: HTTP ${r.status}`);
+  return r.json();
+}).then(d => {
+  document.getElementById('sub').textContent =
+    `${d.meta.rule} ${d.meta.tickets} tickets; generated ${d.meta.generated_at.slice(0, 10)}.`;
+  const grid = document.getElementById('grid');
+  render('All sprints', 'Bars can sum to more than the ticket count when several people work one ticket.',
+         d.total, grid, 'total');
+  d.by_sprint.forEach(s =>
+    render(`Sprint ${s.sprint}`, `${s.tickets} tickets in this sprint.`, s.people, grid));
+}).catch(e => {
+  document.getElementById('sub').textContent =
+    'Could not load involvement.json - run src/involvement.py and serve over http. ' + e;
+});
+</script>
+</body>
+</html>

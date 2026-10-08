@@ -1,0 +1,87 @@
+<!doctype html>
+<!--
+  Tickets involving each person across both boards. involvement-viewer.html is unchanged.
+  Generate data:  python src/involvement_combined.py
+  Serve:          python -m http.server 8000  ->  http://localhost:8000/web/involvement-combined.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Team PnC - tickets involving each person (all boards)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    body { margin: 0; padding: 24px; background: #f5f6f8; color: #1b1f23;
+           font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    .sub, .note { color: #57606a; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 16px;
+            margin-top: 18px; }
+    .card { background: #fff; border: 1px solid #d8dee4; border-radius: 10px; padding: 14px 16px; }
+    .card.total { grid-column: 1 / -1; }
+    .card h3 { margin: 0 0 4px; font-size: 15px; }
+    .wrap { position: relative; }
+  </style>
+</head>
+<body>
+<h1>Tickets involving each person - all boards</h1>
+<div class="sub" id="sub">Loading...</div>
+<div class="grid" id="grid"></div>
+<script>
+const COLORS = ['#2f6fd0', '#3aa757', '#e8833a', '#8a63c4'];
+
+function render(title, note, people, boards, host, cls) {
+  const card = document.createElement('div');
+  card.className = 'card ' + (cls || '');
+  card.innerHTML = `<h3>${title}</h3><p class="note">${note}</p><div class="wrap"><canvas></canvas></div>`;
+  card.querySelector('.wrap').style.height = Math.max(160, people.length * 26 + 60) + 'px';
+  host.appendChild(card);
+  new Chart(card.querySelector('canvas'), {
+    type: 'bar',
+    data: {
+      labels: people.map(p => p.name),
+      datasets: boards.map((b, i) => ({
+        label: b, data: people.map(p => p.by_board[b] || 0), backgroundColor: COLORS[i % COLORS.length],
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { tooltip: { callbacks: {
+        footer: items => {
+          const p = people[items[0].dataIndex];
+          return `Total: ${p.tickets} (${p.as_assignee} assigned, ${p.via_tasks_only} via tasks only)`;
+        },
+      } } },
+      scales: {
+        x: { stacked: true, beginAtZero: true, title: { display: true, text: 'Tickets' } },
+        // Show every name; Chart.js otherwise skips labels when bars are dense.
+        y: { stacked: true, ticks: { autoSkip: false } },
+      },
+    },
+  });
+}
+
+fetch('../data/involvement-combined.json').then(r => {
+  if (!r.ok) throw new Error(`involvement-combined.json: HTTP ${r.status}`);
+  return r.json();
+}).then(d => {
+  const boards = d.meta.boards.map(b => b.name);
+  document.getElementById('sub').textContent = `${d.meta.rule} ` +
+    d.meta.boards.map(b => `${b.name}: ${b.tickets} tickets from Sprint ${b.first_sprint}`).join('; ') +
+    `. Generated ${d.meta.generated_at.slice(0, 10)}.`;
+  const grid = document.getElementById('grid');
+  render('All sprints, all boards',
+         'Bars can sum to more than the ticket count when several people work one ticket.',
+         d.total, boards, grid, 'total');
+  d.by_sprint.forEach(s => {
+    const label = boards.filter(b => s.sprints[b]).map(b => `${b} ${s.sprints[b]}`).join(' / ');
+    const note = boards.filter(b => s.sprints[b]).map(b => `${b}: ${s.tickets[b]} tickets`).join('; ');
+    render(`2026 sprint #${s.index} (${label})`, note, s.people, boards, grid);
+  });
+}).catch(e => {
+  document.getElementById('sub').textContent =
+    'Could not load involvement-combined.json - run src/involvement_combined.py and serve over http. ' + e;
+});
+</script>
+</body>
+</html>

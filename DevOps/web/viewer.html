@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!--
+  Reference viewer - NOT the product.
+
+  This exists to prove data/dashboard.json is chart-ready and to give the real web app a
+  worked example of binding to the "charts" section. Every chart below is rendered from a
+  spec in that array; no chart is hand-coded.
+
+  Usage (the browser blocks fetch on file:// URLs, so serve the folder):
+      cd cli/DevOps
+      python -m http.server 8000
+      then open http://localhost:8000/web/viewer.html
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Team PnC - ticket analysis</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, "Segoe UI", sans-serif; margin: 0; padding: 24px;
+         background: #f5f6f8; color: #1b1f23; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #57606a; font-size: 13px; margin-bottom: 20px; }
+  .warn { background: #fff4e5; border: 1px solid #f0c48a; color: #7a4b00;
+          padding: 10px 14px; border-radius: 8px; margin-bottom: 18px; font-size: 13px; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+  .tile { background: #fff; border: 1px solid #d8dee4; border-radius: 10px;
+          padding: 14px 18px; min-width: 132px; }
+  .tile .n { font-size: 26px; font-weight: 600; }
+  .tile .l { font-size: 12px; color: #57606a; margin-top: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  .card { background: #fff; border: 1px solid #d8dee4; border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 2px; font-size: 14px; }
+  .card .note { font-size: 11px; color: #57606a; margin: 0 0 8px; }
+  .wrap { position: relative; height: 300px; }
+  .tall .wrap { height: 420px; }
+  .tall { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<h1>Team PnC - ticket analysis</h1>
+<div class="sub" id="sub">Loading...</div>
+<div id="warn"></div>
+<div class="tiles" id="tiles"></div>
+<div class="grid" id="grid"></div>
+
+<script>
+const PALETTE = ['#2f6fd0','#e8833a','#3aa757','#c8433a','#8a63c4','#8a6250',
+                 '#d17ab5','#7b8794','#b5bd3f','#3fb5bd','#a05195','#d45087'];
+
+// Charts that carry many categories read better with the axis flipped.
+const render = (spec, host) => {
+  const wide = spec.horizontal || spec.series.length > 4 || spec.labels.length > 16;
+  const card = document.createElement('div');
+  card.className = 'card' + (wide ? ' tall' : '');
+  card.innerHTML = `<h3>${spec.title}</h3>` +
+                   (spec.note ? `<p class="note">${spec.note}</p>` : '') +
+                   `<div class="wrap"><canvas></canvas></div>`;
+  host.appendChild(card);
+
+  const isPie = spec.type === 'pie';
+  const datasets = spec.series.map((s, i) => ({
+    label: s.name,
+    data: s.data,
+    backgroundColor: isPie ? spec.labels.map((_, j) => PALETTE[j % PALETTE.length])
+                           : PALETTE[i % PALETTE.length],
+    borderColor: PALETTE[i % PALETTE.length],
+    fill: spec.type === 'area',
+    tension: 0.3,
+  }));
+
+  new Chart(card.querySelector('canvas'), {
+    type: isPie ? 'doughnut' : (spec.type === 'area' ? 'line' : spec.type),
+    data: { labels: spec.labels, datasets },
+    options: {
+      maintainAspectRatio: false,
+      indexAxis: spec.horizontal ? 'y' : 'x',
+      plugins: {
+        legend: { display: isPie || spec.series.length > 1,
+                  position: isPie ? 'right' : 'top',
+                  labels: { boxWidth: 12, font: { size: 11 },
+                    // Doughnut legends are per slice, so build them from the spec to append
+                    // the share. The generic default would collapse to one dataset entry.
+                    generateLabels: isPie ? (chart => spec.labels.map((name, i) => ({
+                      text: `${name} - ${spec.percent[i]}%`,
+                      fillStyle: PALETTE[i % PALETTE.length],
+                      strokeStyle: PALETTE[i % PALETTE.length],
+                      hidden: !chart.getDataVisibility(i),
+                      index: i,
+                    }))) : undefined } },
+        tooltip: isPie ? { callbacks: {
+          label: c => ` ${c.label}: ${c.parsed} (${spec.percent[c.dataIndex]}%)`,
+        } } : {},
+      },
+      scales: isPie ? {} : {
+        x: { stacked: !!spec.stacked, title: { display: !!spec.x_label, text: spec.x_label } },
+        y: { stacked: !!spec.stacked, beginAtZero: true,
+             title: { display: !!spec.y_label, text: spec.y_label } },
+      },
+    },
+  });
+};
+
+fetch('../data/dashboard.json').then(r => r.json()).then(d => {
+  const m = d.meta, t = d.totals;
+  document.getElementById('sub').textContent =
+    `${m.source.organization} / ${m.source.project} - sprints ${m.sprint_first}-${m.sprint_last}` +
+    ` - collected ${(m.last_collected_at || '').slice(0, 10)}`;
+
+  if (!m.data_quality.taxonomy_reviewed) {
+    document.getElementById('warn').innerHTML =
+      `<div class="warn"><b>Draft labels.</b> topics.yaml has not been reviewed, so Topic and ` +
+      `Work pattern charts are provisional (${m.data_quality.low_confidence_labels} of ` +
+      `${t.tickets_total} tickets scored below 0.6 confidence). Ticket counts, size and ` +
+      `per-sprint charts are unaffected.</div>`;
+  }
+
+  const tiles = [
+    [t.tickets_total, 'Tickets'],
+    [t.tickets_closed + ' (' + t.closed_pct + '%)', 'Closed'],
+    [t.requirement_to_bug_ratio + ':1', 'Requirement : Bug'],
+    [d.size.total_points, 'Size points'],
+    [d.size.median_points, 'Median ticket size'],
+    [d.cycle_time.overall.median_days + ' d', 'Median cycle time'],
+    [d.people.tickets_assigned, 'Assigned tickets'],
+    [m.work_items_collected, 'Work items scanned'],
+  ];
+  document.getElementById('tiles').innerHTML = tiles
+    .map(([n, l]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`)
+    .join('');
+
+  const grid = document.getElementById('grid');
+  d.charts.forEach(spec => render(spec, grid));
+}).catch(e => {
+  document.getElementById('sub').textContent =
+    'Could not load dashboard.json - serve this folder over http, not file://. ' + e;
+});
+</script>
+</body>
+</html>

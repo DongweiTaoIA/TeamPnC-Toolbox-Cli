@@ -1,0 +1,114 @@
+/* Printed-policy look: condensed 7pt sans, justified, multi-column regions. */
+.policy-view {
+  width: 560pt;
+  margin: 0 auto;
+  padding: 24pt 26pt;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  font-family: 'Frutiger LT Std', 'Roboto Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  font-stretch: condensed;
+  font-size: 7pt;
+  line-height: 8pt;
+  color: #111;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.pv-region {
+  column-gap: 10pt;
+  margin-bottom: 4pt;
+}
+
+/* Nested <strong> would otherwise escalate to weight 900. */
+.policy-view strong {
+  font-weight: 700;
+}
+
+.pv-block {
+  break-inside: avoid-column;
+  margin-bottom: 2pt;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.pv-block:hover {
+  background: #eef2ff;
+}
+
+.pv-block.selected {
+  background: #e0e7ff;
+  outline: 1px solid var(--accent);
+}
+
+.pv-item,
+.pv-paragraph {
+  break-inside: auto;
+}
+
+.pv-sectionTitle {
+  font-size: 7pt;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+  margin: 6pt 0 1pt;
+  column-span: all;
+}
+
+.pv-lead {
+  margin-bottom: 4pt;
+}
+
+.pv-lead.centered {
+  text-align: center;
+}
+
+.pv-heading {
+  font-size: 7pt;
+  font-weight: 900;
+  margin-top: 4pt;
+  break-after: avoid;
+}
+
+.pv-marker {
+  display: inline-block;
+  min-width: 13.5pt;
+  margin-left: 0;
+}
+
+.pv-item {
+  display: flex;
+}
+
+.pv-item .pv-marker {
+  flex: 0 0 13.5pt;
+}
+
+.pv-item .pv-text {
+  flex: 1;
+}
+
+.pv-definition {
+  margin-bottom: 2pt;
+}
+
+.pv-table {
+  border-collapse: collapse;
+  margin: 2pt 0 4pt;
+  width: auto;
+}
+
+.pv-table th,
+.pv-table td {
+  padding: 0 10pt 0 0;
+  text-align: left;
+  font-weight: normal;
+}
+
+.pv-table th {
+  font-weight: 700;
+}
+
+.highlight-terms .pv-term {
+  background: #fef3c7;
+  border-radius: 2px;
+}

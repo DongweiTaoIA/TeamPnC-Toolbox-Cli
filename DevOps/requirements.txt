@@ -1,0 +1,18 @@
+I received an inquiry regarding the delivery of dynamic forms
+
+
+I need to send an assessment to Vicki that summarizes the full picture of the delivery of dynamic forms. From their perspective, this was delivered and never tested and now we are running into issues the week before launch. I want to get the following information:
+Overview timeline of the features delivered for Dynamic Forms 
+Original business requirements around the decision to add dealer group and OEM as inputs for generating dynamic forms
+How can we improve/bridge this gap between user expectations and value delivered so we can minimize this from happening
+ 
+ the first one, I think we can find some information from change history of the ACCP code base.
+ C:\repos\tfs\DP_Unifi_NEW\Dev\ACCP
+
+ we can search Dynamic Forms
+
+ amd also try to search tickets
+
+
+ let us try the first one.
+ 

@@ -1,0 +1,488 @@
+[
+  {
+    "step": 501,
+    "desc": "Data upload 1 (1 table) - cfGLProgramGroup",
+    "dw2_id": 188473,
+    "dw2_sprint": 105,
+    "dw3_id": 191209,
+    "dw3_sprint": 106,
+    "new_step": 701
+  },
+  {
+    "step": 502,
+    "desc": "Data upload 2 (1 table) - cfGLAccountProv",
+    "dw2_id": 188709,
+    "dw2_sprint": 105,
+    "dw3_id": 191217,
+    "dw3_sprint": 106,
+    "new_step": 702
+  },
+  {
+    "step": 503,
+    "desc": "GL Uploader & Data upload 3 (5 tables) - cfGLAccount etc",
+    "dw2_id": 183968,
+    "dw2_sprint": 105,
+    "dw3_id": 191230,
+    "dw3_sprint": 106,
+    "new_step": 703
+  },
+  {
+    "step": 504,
+    "desc": "Data upload 4 (1 table) - cfGLAccount EffectDt",
+    "dw2_id": 189058,
+    "dw2_sprint": 105,
+    "dw3_id": 191921,
+    "dw3_sprint": 106,
+    "new_step": 704
+  },
+  {
+    "step": 505,
+    "desc": "Data upload 5 (2 tables)",
+    "dw2_id": 188475,
+    "dw2_sprint": 105,
+    "dw3_id": 191930,
+    "dw3_sprint": 106,
+    "new_step": 705
+  },
+  {
+    "step": 506,
+    "desc": "Data upload 6 - Intercompany (4 tables)",
+    "dw2_id": 188701,
+    "dw2_sprint": 105,
+    "dw3_id": 191941,
+    "dw3_sprint": 107,
+    "new_step": 706
+  },
+  {
+    "step": 507,
+    "desc": "Data upload 7 (1 table) - ReversalMapping",
+    "dw2_id": 188482,
+    "dw2_sprint": 105,
+    "dw3_id": 191950,
+    "dw3_sprint": 107,
+    "new_step": 707
+  },
+  {
+    "step": 508,
+    "desc": "Data upload 8 (4 tables) - dmCashDeposit etc",
+    "dw2_id": 188705,
+    "dw2_sprint": 105,
+    "dw3_id": 191958,
+    "dw3_sprint": 106,
+    "new_step": 708
+  },
+  {
+    "step": 509,
+    "desc": "Data upload 9 (1 table) - for Manual Journal",
+    "dw2_id": 190433,
+    "dw2_sprint": 105,
+    "dw3_id": 191975,
+    "dw3_sprint": 107,
+    "new_step": 709
+  },
+  {
+    "step": 510,
+    "desc": "Data upload 10 (1 table) - mpProductBrandingFee",
+    "dw2_id": 193753,
+    "dw2_sprint": 105,
+    "dw3_id": 193662,
+    "dw3_sprint": 107,
+    "new_step": 710
+  },
+  {
+    "step": 511,
+    "desc": "Data upload 11 (2 table) - cfProductCompany and cfCompanyProduct",
+    "dw2_id": 194549,
+    "dw2_sprint": 105,
+    "dw3_id": 194557,
+    "dw3_sprint": 107,
+    "new_step": 711
+  },
+  {
+    "step": 512,
+    "desc": "Data upload 12 (1 table) - cfProductCashTransfer",
+    "dw2_id": 198713,
+    "dw2_sprint": 105,
+    "dw3_id": 198712,
+    "dw3_sprint": 112,
+    "new_step": 712
+  },
+  {
+    "step": 531,
+    "desc": "Unblock DW003, 004 trxs for ERP",
+    "dw2_id": 185543,
+    "dw2_sprint": 105,
+    "dw3_id": 191997,
+    "dw3_sprint": 106,
+    "new_step": 731
+  },
+  {
+    "step": 532,
+    "desc": "Premium Issue (PI) (new SP) - DW",
+    "dw2_id": 188476,
+    "dw2_sprint": 105,
+    "dw3_id": 192010,
+    "dw3_sprint": 111,
+    "new_step": 732
+  },
+  {
+    "step": 533,
+    "desc": "Premium Reversal (RP) - DW",
+    "dw2_id": 188801,
+    "dw2_sprint": 105,
+    "dw3_id": 192036,
+    "dw3_sprint": 111,
+    "new_step": 733
+  },
+  {
+    "step": 534,
+    "desc": "Cancellation (C) (new SP) - DW",
+    "dw2_id": 188477,
+    "dw2_sprint": 105,
+    "dw3_id": 193815,
+    "dw3_sprint": 111,
+    "new_step": 734
+  },
+  {
+    "step": 535,
+    "desc": "Reinstate (R) - DW",
+    "dw2_id": 188478,
+    "dw2_sprint": 105,
+    "dw3_id": 193982,
+    "dw3_sprint": 111,
+    "new_step": 735
+  },
+  {
+    "step": 536,
+    "desc": "Manual Journal (J) - DW",
+    "dw2_id": 188707,
+    "dw2_sprint": 105,
+    "dw3_id": 194289,
+    "dw3_sprint": 111,
+    "new_step": 736
+  },
+  {
+    "step": 537,
+    "desc": "Cheque Approval (GP) - DW - TEST ONLY",
+    "dw2_id": 188958,
+    "dw2_sprint": 105,
+    "dw3_id": 194410,
+    "dw3_sprint": 111,
+    "new_step": 737
+  },
+  {
+    "step": 538,
+    "desc": "Claim Cash Deposit (CC) - DW - TEST ONLY",
+    "dw2_id": 189617,
+    "dw2_sprint": 105,
+    "dw3_id": 194412,
+    "dw3_sprint": 111,
+    "new_step": 738
+  },
+  {
+    "step": 539,
+    "desc": "Claim Cash Deposit Reversal (CE) - DW - TEST ONLY",
+    "dw2_id": 189615,
+    "dw2_sprint": 105,
+    "dw3_id": 194413,
+    "dw3_sprint": 111,
+    "new_step": 739
+  },
+  {
+    "step": 540,
+    "desc": "Claim Payment (CG) - DW - TEST ONLY",
+    "dw2_id": 188961,
+    "dw2_sprint": 105,
+    "dw3_id": 194414,
+    "dw3_sprint": 111,
+    "new_step": 740
+  },
+  {
+    "step": 541,
+    "desc": "Claim Payment Reversal (CP) - DW - TEST ONLY",
+    "dw2_id": 188979,
+    "dw2_sprint": 105,
+    "dw3_id": 194411,
+    "dw3_sprint": 111,
+    "new_step": 741
+  },
+  {
+    "step": 542,
+    "desc": "Cancellation for Payment Generation - DW - TEST ONLY",
+    "dw2_id": 189613,
+    "dw2_sprint": 105,
+    "dw3_id": 194559,
+    "dw3_sprint": 111,
+    "new_step": 742
+  },
+  {
+    "step": 543,
+    "desc": "Payment Reversal (PR) - DW - TEST ONLY",
+    "dw2_id": 188967,
+    "dw2_sprint": 105,
+    "dw3_id": 194560,
+    "dw3_sprint": 111,
+    "new_step": 743
+  },
+  {
+    "step": 544,
+    "desc": "Stop Payment - DW - TEST ONLY",
+    "dw2_id": 189644,
+    "dw2_sprint": 105,
+    "dw3_id": 194688,
+    "dw3_sprint": 111,
+    "new_step": 744
+  },
+  {
+    "step": 545,
+    "desc": "Clear Suspense from Reinstate page - DW - TEST ONLY",
+    "dw2_id": 189642,
+    "dw2_sprint": 105,
+    "dw3_id": 194689,
+    "dw3_sprint": 111,
+    "new_step": 745
+  },
+  {
+    "step": 546,
+    "desc": "Clear Suspense from batch NDPY990M - DW - TEST ONLY",
+    "dw2_id": 189731,
+    "dw2_sprint": 105,
+    "dw3_id": 194699,
+    "dw3_sprint": 111,
+    "new_step": 746
+  },
+  {
+    "step": 547,
+    "desc": "Cash Transfer Approval - DW - TEST ONLY",
+    "dw2_id": 189729,
+    "dw2_sprint": 105,
+    "dw3_id": 194700,
+    "dw3_sprint": 111,
+    "new_step": 747
+  },
+  {
+    "step": 548,
+    "desc": "Cash Transfer Reversal - DW - TEST ONLY",
+    "dw2_id": 189727,
+    "dw2_sprint": 105,
+    "dw3_id": 194701,
+    "dw3_sprint": 111,
+    "new_step": 748
+  },
+  {
+    "step": 549,
+    "desc": "Cash Deposit (CD) - DW - TEST ONLY",
+    "dw2_id": 188480,
+    "dw2_sprint": 105,
+    "dw3_id": 194702,
+    "dw3_sprint": 111,
+    "new_step": 749
+  },
+  {
+    "step": 550,
+    "desc": "Report DPR3165 - Improve",
+    "dw2_id": 190516,
+    "dw2_sprint": 105,
+    "dw3_id": 194703,
+    "dw3_sprint": 111,
+    "new_step": 750
+  },
+  {
+    "step": 551,
+    "desc": "Report - DPR3160 - DW - TEST ONLY",
+    "dw2_id": 190518,
+    "dw2_sprint": 105,
+    "dw3_id": 194854,
+    "dw3_sprint": 111,
+    "new_step": 751
+  },
+  {
+    "step": 552,
+    "desc": "Report - DPR3160W - EW (not DW) - TEST ONLY",
+    "dw2_id": 190520,
+    "dw2_sprint": 105,
+    "dw3_id": 194855,
+    "dw3_sprint": 111,
+    "new_step": 752
+  },
+  {
+    "step": 553,
+    "desc": "Report - DPR3160D - DW - TEST ONLY",
+    "dw2_id": 190522,
+    "dw2_sprint": 105,
+    "dw3_id": 194856,
+    "dw3_sprint": 111,
+    "new_step": 753
+  },
+  {
+    "step": 554,
+    "desc": "Report - DPR3180 - DW - TEST ONLY",
+    "dw2_id": 190514,
+    "dw2_sprint": 105,
+    "dw3_id": 194857,
+    "dw3_sprint": 111,
+    "new_step": 754
+  },
+  {
+    "step": 555,
+    "desc": "WebAPI - Cash Deposit - DW - TEST ONLY",
+    "dw2_id": 188799,
+    "dw2_sprint": 105,
+    "dw3_id": 194858,
+    "dw3_sprint": 111,
+    "new_step": 755
+  },
+  {
+    "step": 556,
+    "desc": "WebAPI - Cash Transfer - DW - TEST ONLY",
+    "dw2_id": 190418,
+    "dw2_sprint": 105,
+    "dw3_id": 194939,
+    "dw3_sprint": 111,
+    "new_step": 756
+  },
+  {
+    "step": 557,
+    "desc": "WebAPI - Remittance - DW - TEST ONLY - After Feb 4 migration",
+    "dw2_id": 190757,
+    "dw2_sprint": 107,
+    "dw3_id": 194940,
+    "dw3_sprint": 111,
+    "new_step": 757
+  },
+  {
+    "step": 558,
+    "desc": "WebAPI - EFT UpdatePayment (EFT Reclass) - DW - TEST ONLY",
+    "dw2_id": 190461,
+    "dw2_sprint": 105,
+    "dw3_id": 195265,
+    "dw3_sprint": 111,
+    "new_step": 758
+  },
+  {
+    "step": 559,
+    "desc": "EFT Payment Reclass Reversal - DW - TEST ONLY",
+    "dw2_id": 189646,
+    "dw2_sprint": 105,
+    "dw3_id": 195266,
+    "dw3_sprint": 111,
+    "new_step": 759
+  },
+  {
+    "step": 560,
+    "desc": "UI - Payment Entry (DP710) - DW - TEST ONLY",
+    "dw2_id": 190470,
+    "dw2_sprint": 105,
+    "dw3_id": 195356,
+    "dw3_sprint": 111,
+    "new_step": 760
+  },
+  {
+    "step": 561,
+    "desc": "UI - Cash Deposit (DP700) - DW - TEST ONLY",
+    "dw2_id": 190472,
+    "dw2_sprint": 105,
+    "dw3_id": 195357,
+    "dw3_sprint": 111,
+    "new_step": 761
+  },
+  {
+    "step": 562,
+    "desc": "UI - Cash Transfer (DP702) - DW - TEST ONLY",
+    "dw2_id": 190478,
+    "dw2_sprint": 105,
+    "dw3_id": 195358,
+    "dw3_sprint": 111,
+    "new_step": 762
+  },
+  {
+    "step": 563,
+    "desc": "UI - Manual Journal (from Susp. Details DP735D) - DW - TEST ONLY",
+    "dw2_id": 190420,
+    "dw2_sprint": 105,
+    "dw3_id": 195359,
+    "dw3_sprint": 111,
+    "new_step": 763
+  },
+  {
+    "step": 564,
+    "desc": "UI - Remittance (DP620) - DW - TEST ONLY",
+    "dw2_id": 190504,
+    "dw2_sprint": 105,
+    "dw3_id": 195361,
+    "dw3_sprint": 111,
+    "new_step": 764
+  },
+  {
+    "step": 565,
+    "desc": "UI - Remittance Reconciliation (DP725) - DW - TEST ONLY",
+    "dw2_id": 190500,
+    "dw2_sprint": 105,
+    "dw3_id": 195362,
+    "dw3_sprint": 111,
+    "new_step": 765
+  },
+  {
+    "step": 566,
+    "desc": "UI - Chargeback Reconciliation (DP726) - DW - TEST ONLY",
+    "dw2_id": 190502,
+    "dw2_sprint": 105,
+    "dw3_id": 195363,
+    "dw3_sprint": 111,
+    "new_step": 766
+  },
+  {
+    "step": 567,
+    "desc": "UI - Dealer Suspense (DP735) - DW - TEST ONLY",
+    "dw2_id": 190474,
+    "dw2_sprint": 105,
+    "dw3_id": 195461,
+    "dw3_sprint": 111,
+    "new_step": 767
+  },
+  {
+    "step": 568,
+    "desc": "UI - Dealer Suspense Details (DP735D) - DW - TEST ONLY",
+    "dw2_id": 190476,
+    "dw2_sprint": 105,
+    "dw3_id": 195460,
+    "dw3_sprint": 111,
+    "new_step": 768
+  },
+  {
+    "step": 569,
+    "desc": "UI - One Statement for DW Invoice - DW - TEST ONLY",
+    "dw2_id": 188474,
+    "dw2_sprint": 105,
+    "dw3_id": 195543,
+    "dw3_sprint": 111,
+    "new_step": 769
+  },
+  {
+    "step": 570,
+    "desc": "One-Statement script - TEST ONLY",
+    "dw2_id": 188479,
+    "dw2_sprint": 105,
+    "dw3_id": 196021,
+    "dw3_sprint": 111,
+    "new_step": 770
+  },
+  {
+    "step": 571,
+    "desc": "Regression Test - Non DW - TEST ONLY",
+    "dw2_id": 190766,
+    "dw2_sprint": 105,
+    "dw3_id": 196024,
+    "dw3_sprint": 111,
+    "new_step": 771
+  },
+  {
+    "step": 572,
+    "desc": "Dealer Billing Aging report [AM9] - DW - TEST ONLY",
+    "dw2_id": 186067,
+    "dw2_sprint": 105,
+    "dw3_id": 196025,
+    "dw3_sprint": 111,
+    "new_step": 772
+  }
+]

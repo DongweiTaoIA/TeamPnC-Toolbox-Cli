@@ -1,0 +1,201 @@
+Recently we insert some records into cfProductPrfx, which defines what Contract Prefix should be used when generate a new contract num
+
+this is the stored procedure being used to generate contractnum
+
+CREATE PROCEDURE [dbo].[DPP_GenContractNumber] @psProductId		CHAR(2)
+                                             , @psContractType	VARCHAR(2)
+											            , @psDealerId		VARCHAR(8)
+											            , @psLienHolderId	VARCHAR(2)
+											            , @psProgramId      VARCHAR(5) = NULL
+											            , @psGPProgramId    VARCHAR(5) = NULL
+                                             , @psNum		    CHAR(12) OUTPUT
+                                             , @psLang		    CHAR(1)	= 'E'
+                                             , @psUserId		    VARCHAR(12)
+
+This is a example
+
+ Declare @lsNum char(12)   
+ EXEC DPP_GenContractNumber 'EW', 'AU', 'AB000008', 'NA', 'AU241', NULL, @lsNum OUT, 'E', 'BQH'
+ print @lsNum
+
+ dealerId ='AB000008' is a hona OEM dealer, the contractnum should have a prefix 'ACPR'
+
+ here is a list of targe tests, provided by Business:
+
+ProgramId	OEM	Lienholder	Prefix
+AU242	HO	NA,FD,IF	HCPM
+AU243	AC	NA,FD,IF	ACPM
+AU248	HO	NA,FD,IF	HCPM
+AU249	HO	NA,FD,IF	HCPM
+AU250	AC	NA,FD,IF	ACPM
+AU240	HO	NA,FD,IF	HCPR
+AU241	AC	NA,FD,IF	ACPR
+AU251	HO	NA,FD,IF	HCPR
+AU252	AC	NA,FD,IF	ACPR
+AU244	HO	NA,FD,IF	HCOP
+AU245	AC	NA,FD,IF	ACOP
+AU246	HO	NA,FD,IF	HCAL
+AU247	AC	NA,FD,IF	ACAL
+
+
+for example, if a dealer OEM is 'AC' (BC000021), ProgramId is 'AU250', the Lienholder is one of 'NA,FD,IF', in this case:
+if we run
+ Declare @lsNum char(12)   
+ EXEC DPP_GenContractNumber 'EW', 'AU', 'BC000021', 'NA', 'AU250', NULL, @lsNum OUT, 'E', 'BQH'
+ print @lsNum
+
+AU250	AC	NA,FD,IF	ACPM
+ it should Have a contractnum starting with 'ACPM', 
+
+ if not, test failed in this combination
+
+ now we need a list of Dealer in each province having OEM ='HO' or 'AC'
+here is the query:
+
+ select DealerId
+ from dmDealer
+ where OEM ='AC' and DealerStat ='A'
+
+or
+OEM ='HO'
+
+
+
+I need to create a commond line tool to test contract prefix.
+
+ContractPrefixTest /F (FNCT) or /A (ACCP) -t (optional Azure Ops ticket number)
+
+It should support two test enviroments:
+FNCT
+ db: sy-ds-dealerservices-dp-unifi.dev.sgbd.ia.iafg.net
+
+ACCP
+ db: sql_van_test_accp.iap.iafg.net,49826
+
+
+Province
+AB
+BC
+MB
+NB
+NL
+NS
+NT
+NU
+ON
+PE
+QC
+SK
+YT
+
+ContractType:
+AT
+AU
+GC
+HT
+MA
+MF
+MN
+MS
+NT
+PM
+PU
+PW
+RV
+SC
+SL
+SM
+SS
+SU
+TT
+UT
+W5
+
+ The tests includes
+ 1. Data validation
+    validate if data inserted into cfProductPrfx is correct as requried compare to the test cases
+
+    if passed then next step, else exit
+
+ 2. Unit Test
+    in our app, it use below sp to generate a contractnum, base on the test cases verify the prefix
+
+CREATE PROCEDURE [dbo].[DPP_GenContractNumber] @psProductId		CHAR(2)
+                                             , @psContractType	VARCHAR(2)
+											            , @psDealerId		VARCHAR(8)
+											            , @psLienHolderId	VARCHAR(2)
+											            , @psProgramId      VARCHAR(5) = NULL
+											            , @psGPProgramId    VARCHAR(5) = NULL
+                                             , @psNum		    CHAR(12) OUTPUT
+                                             , @psLang		    CHAR(1)	= 'E'
+                                             , @psUserId		    VARCHAR(12)
+for example if we execute 
+    EXEC DPP_GenContractNumber 'EW', 'AT', 'AB002415', 'NA', 'AU242', NULL, @lsNum OUT, 'E', 'BQH'
+
+    @lsNum should start with 'HCPM'+ 8 numbers
+   
+    we also need to generate a unit test list based on the test cases
+
+    if passed then next step, else exit
+
+The regression test is to use contract create sp to create a real contract and check the real contractnum being created has the correct prefix. to do that:
+1. we need set up dealer first. for each ProgramId, first we need to find if this program is ready, 
+
+select ProvState, ContractType
+from cfProgramDetl
+where ProgramId='AU240'
+and GETDATE() between EffectDt and ExpiryDt
+
+it returns
+ProvState	ContractType
+AB	AU
+BC	AU
+MB	AU
+NB	AU
+NL	AU
+NS	AU
+ON	AU
+PE	AU
+SK	AU
+
+which means this program 'AU240' is avaialbe in above provinces  and ContractType is 'AU'
+if result is empty, log it and skip
+now for each province in result. we need find or set up a dealer to sell this program. 
+for example:
+
+ select p.*
+ from EW_cfDealerProgram p
+ inner join dmDealer d on p.DealerId = d.DealerId
+ where p.ProgramId='AU240' 
+ and d.ProvState ='NL' 
+ and d.DealerStat ='A' 
+ and d.OEM ='HO' --programId AU240 is for OEM 'HO'
+ 
+ if no dealer, we need find a dealer based on OEM, Province and then set up a dealer by using below sp, replacing correct parameters
+  declare @p9 xml
+set @p9=convert(xml,N'<Prgms><Prgm><PM>AU242</PM><PT>Y</PT><AD>Y</AD><EX/><CB>CB001</CB><BA>Pr</BA><EF>15-Sep-2026</EF><EP>31-Dec-9999</EP><DR/></Prgm></Prgms>')
+exec DPP_DP153EWDealerProgram_Save @psDealerId='AB000019',@psContractGroup='EAU',@psPremiumAdjustType='L',@psCancNotifYN='N',@psHoldInvoiceYN='N',@psNetRemittanceYN='N',@psHoldDealerCompYN='N',@psAllowPrintRatesYN='N',@psProgramListXml=@p9,@psLang='E',@psUserId='SXR'
+
+check again after sp sucess
+
+when we have this dealer, no we can call a sp to create a quote
+
+replacing dealerId, ProgramId, and use this if program is HO <MK>HONDA</MK><MD>CIVIC</MD> if AC use <MK>ACURA</MK><MD>MDX</MD>
+declare @p1 xml
+set @p1=convert(xml,N'<Quote><K></K><P>EW</P><D>AB000019</D><QDT>21-Sep-2026</QDT><DDT>21-Sep-2026</DDT><EDT>21-Sep-2026</EDT><VP>0</VP><KM>100</KM><ML>62</ML><CG>EAU</CG><CT>AU</CT><PG>AU242||S</PG><VIN/><VC>NE</VC><MK>HONDA</MK><MD>CIVIC</MD><YR>2026</YR><AC>N</AC><DW>F</DW><FL>G</FL><CY>4</CY><WT>36</WT><WTS>0</WTS><WKM>60000</WKM><WDT>21-Sep-2026</WDT><CC>1</CC><LN>Test</LN><FN>Test</FN><PH1>6041111111</PH1><PS>AB</PS><ISA>N</ISA><IDTR>N</IDTR><CKEY>0</CKEY><US>N</US><MEM>0</MEM><MEK>0</MEK><ECC>0</ECC><EHP>0</EHP><EDS>N</EDS><EYR>0</EYR><EHRS>0</EHRS><LF>0</LF><QS>U</QS><Details><QuoteDetl><SN>0</SN><Covg><CT>BA</CT><T>36</T><KM>80000</KM><D>100</D><BR>779</BR><DB>0</DB><PTA>0</PTA><R>779</R><M>0</M><MA>0</MA><T1T>GST</T1T><T1V>0.05</T1V><T2V>0</T2V><RT1>38.95</RT1><RT2>0</RT2><LT1>38.95</LT1><LT2>0</LT2><PT1>0</PT1><PT2>0</PT2></Covg><CK>0</CK><OptionCovgs><OptionCovg><OID>EWRA</OID><OC>0</OC></OptionCovg><OptionCovg><OID>EWSG</OID><OC>0</OC></OptionCovg></OptionCovgs><Surcharges/></QuoteDetl></Details></Quote>')
+declare @p2 int
+set @p2=3219101
+declare @p3 char(10)
+set @p3=NULL
+exec DPP_DP608Quote_Save @psQuoteXml=@p1,@piQuoteKey=@p2 output,@psQuoteNum=@p3 output,@psLang='E',@psUserId='SXR'
+select @p2, @p3
+
+after sucess, we will get a new quote key, then we use that quote key to execute 
+
+declare @p3 int
+declare @p4 char(12)
+
+exec DPP_DP608Quote_Contract @piQuoteKey=,@piQuoteSeqNum=1,@piContractKey=@p3 output,@psContractNum=@p4 output,@psLang='E',@psUserId='SXR'
+select @p3, @p4
+
+after sucess, we will have a real contract, the contract num is @p4. it should start with the correct prefix.

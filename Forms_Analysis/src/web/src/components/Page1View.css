@@ -1,0 +1,67 @@
+.page1-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.page1-canvas {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.page1-canvas img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.field-box {
+  position: absolute;
+  border: 1px solid rgba(99, 102, 241, 0.6);
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 1px;
+  cursor: help;
+}
+
+.field-box.type-checkbox,
+.field-box.type-radiobutton {
+  border-color: rgba(236, 72, 153, 0.7);
+  background: rgba(236, 72, 153, 0.1);
+}
+
+.field-box.hovered {
+  background: rgba(99, 102, 241, 0.35);
+  border-color: var(--accent);
+  z-index: 2;
+}
+
+.page1-fields {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 220px);
+  display: flex;
+  flex-direction: column;
+}
+
+.field-filter {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.field-list {
+  overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+  .page1-view {
+    grid-template-columns: 1fr;
+  }
+}

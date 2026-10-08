@@ -1,0 +1,34 @@
+pymupdf>=1.26
+pdfplumber>=0.11
+pyodbc>=5.2
+fastapi>=0.115
+uvicorn>=0.32
+httpx>=0.27
+
+
+in my legacy app, forms are defined in below tables
+
+-- for non EW forms, productId
+select *
+from cfForm
+
+select *
+from cfFormRev
+
+-- EW forms, productId=EW
+
+select *
+from ew_cfForm
+
+select *
+from ew_cfFormRev
+
+it works like this way,
+
+for example formId = 7018E the FormType is CTR, ForLang=E is EN
+
+it has a revision in the cfFormRev or ew_cfFormRev table.
+the revisionId is MAR2023
+in this case, there will be a pdf Contract_7018EMAR2023E.pdf, there might be a French version 
+as well, the name will be Contract_7018EMAR2023F.pdf. but not always.
+so in the UI, I need list product 

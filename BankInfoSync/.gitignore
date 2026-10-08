@@ -1,0 +1,14 @@
+# Secrets / env-specific config
+.env
+
+# Runtime output
+logs/
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env.local

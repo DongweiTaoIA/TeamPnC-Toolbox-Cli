@@ -1,0 +1,119 @@
+I need to build a tool to do migration 
+
+it contains two parts: 1. Package build 2. Deployment
+
+Here is the migration schedule:
+
+https://indall.sharepoint.com/:x:/r/teams/-IAP-LS-ITSAL-VAGDevelopmentTeam/Shared%20Documents/General/Migration%20Documents/2026_MigrationSchedule.xlsx?d=wf284a57802d740b1a95cc333208ad274&csf=1&web=1&e=Sg66oF
+
+The sheet name is "Sprint & Migration Schedule"
+
+Column A is the Sprint# - matches to Azure DevOps sprint
+
+Column F is the PROD Migration Date
+
+Column D is code freeze start date
+
+column K is the PnC (our team) Package builder's firstname 
+
+Column L is the PnC (our team) Package builder backup's firstname
+
+column V is the name of production deployment person
+
+column W is the backup for the production deployment person
+
+
+first we need read above information from the migration schedule sheet.
+
+then we need to find a ticket in Azure DevOps corresponding to the migration schedule.
+
+for example https://dev.azure.com/SOPCV-SNW/DP_Unifi_NEW/_workitems/edit/211939
+
+I use PAT to connect to Azure DevOps.
+
+These are tasks in that ticket.
+1. 10 Days before - book resources
+2. 9 Days before - DPACCP Refresh
+3. 3 Days before
+4. 2 Days before
+5. Migration Day
+6. Day After Migration
+
+each day corresponds to a specific task that needs to be completed as part of the migration process.
+
+now let's start building the windows application tool to semit-automate this process. 
+
+
+Task one - Book Resources for Migration
+if the task already resoveled, we don't want to rerun, because it might cause problem. but we need test, so we need add a test run button in the task for each steps. Let us do the first Task. it has two steps, create two service now tickets for booking resources, one for DBA team one for operation team. for the security reason. we have to open brower to request. Here is the link:  
+DBA: 
+https://iaaesf.service-now.com/sp?id=sc_cat_item&sys_id=9b5954ed978a591024c43cf3a253af56&table=sc_cat_item&searchTerm=Request%20for%20the%20Database%20team
+
+this is one old ticket as an example:
+https://iaaesf.service-now.com/sp?id=ticket&table=sc_req_item&sys_id=657dde88ebf2cb9cce11fb3ccad0cdd9&view=sp
+
+Select required service
+Resources reservation of pager production implementation type
+Select the relevant time period
+Non-business hours
+Specify execution date and time
+2026-08-27 21:30:00
+Enter request summary
+Unifi and UN Production Implementation - Aug 27, 2026
+Enter detailed request description
+Unifi and UN Production Implementation - Aug 27, 2026
+IA Quebec DBA resource is needed to be on stand by during our Unifi/UniFi 2.0/Unification production migration tonight [Aug 26, 2026] to assist us should we run into issues with Unification/Unifi SQL database.   
+The deployment will start at 9:30PM PST. 
+It should end approx. 2 AM PST. 
+The Start and End dates are PST. Also, the End Date is approximate - migration might be done earlier or later.
+Enter affected organic system(s)
+UniFi applications
+Check this box if the system(s) does not exist
+false
+Select the environment
+PROD
+iA Wealth
+false
+iA Auto Finance (IAAF)
+false
+IAAH
+false
+iA Vancouver (IAP)
+true
+iA Québec
+false
+Other(s)
+false
+Insert Planview project code
+0011024 - DS – Run Operational 
+Select the project lead (CP/SM)
+Tanvir Ahmed
+Select required date
+2026-08-19
+
+
+Operation Team:
+https://iaaesf.service-now.com/sp?id=sc_cat_item&edit=draft&sys_id=b51562113be70b50f1a01c9c24e45ae6
+
+example:
+
+https://iaaesf.service-now.com/sp?id=ticket&table=sc_req_item&sys_id=ac2e1a00eb36cb9cce11fb3ccad0cd59&view=sp
+
+
+Select required service type
+System Management
+Enter a requirement description
+UniFi/UniFI 2.0 production migration - <Aug 26, 2026>
+
+Description of work to be done:
+We are going to do UniFi production migration on <Aug 26, 2026>. 
+Please refer to “Unifi Production Migration document for IAQ Operations”  (TVM TO VERIFY THE NAME WITH OPS) for the steps to be done on migration night.
+
+The developer doing migration tonight is [Tanvir Ahmed]. 
+Can you please send us the names of the Operators that will be on shift during our migration night?
+Select the team required to carry out this request
+Ops. Centre
+Select approximative required date
+2026-08-26
+
+because this is for testing purposes only. please do not send request, click "Save as Draft" instead.

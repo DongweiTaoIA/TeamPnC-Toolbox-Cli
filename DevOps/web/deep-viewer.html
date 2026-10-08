@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Team PnC - deep ticket-content analysis</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f6f8; color: #17202a;
+           font: 14px/1.45 system-ui, sans-serif; }
+    main { max-width: 1200px; margin: auto; padding: 28px; }
+    h1 { margin: 0 0 6px; }
+    .sub, .note { color: #58636f; }
+    .scope { margin: 20px 0; padding: 12px 14px; border: 1px solid #9cc4e4;
+             border-radius: 8px; background: #eef7fd; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+             gap: 12px; margin: 20px 0; }
+    .tile, .card { background: white; border: 1px solid #d9dee3; border-radius: 12px; }
+    .tile { padding: 18px; }
+    .tile strong { display: block; font-size: 25px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { padding: 16px; min-width: 0; }
+    .card.wide { grid-column: 1 / -1; }
+    h3 { margin: 0 0 4px; }
+    .wrap { height: 360px; }
+    @media (max-width: 850px) { .grid { grid-template-columns: 1fr; }
+                                .card.wide { grid-column: auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Team PnC - deep ticket-content analysis</h1>
+  <div class="sub" id="sub"></div>
+  <div class="scope"><b>Separate analysis.</b> Azure DevOps ticket fields only. The existing
+    dashboard and all nine of its charts are unchanged. Themes can overlap.</div>
+  <section class="tiles" id="tiles"></section>
+  <section class="grid" id="grid"></section>
+</main>
+<script>
+const COLORS = ['#2f6fd0','#e8833a','#3aa757','#c8433a','#8a63c4'];
+
+function render(spec, host) {
+  const card = document.createElement('article');
+  card.className = 'card' + (spec.horizontal || spec.labels.length > 10 ? ' wide' : '');
+  card.innerHTML = `<h3>${spec.title}</h3>` +
+    (spec.note ? `<p class="note">${spec.note}</p>` : '') +
+    `<div class="wrap"><canvas></canvas></div>`;
+  host.appendChild(card);
+  new Chart(card.querySelector('canvas'), {
+    type: spec.type,
+    data: {
+      labels: spec.labels,
+      datasets: spec.series.map((series, i) => ({
+        label: series.name,
+        data: series.data,
+        backgroundColor: COLORS[i % COLORS.length],
+        borderColor: COLORS[i % COLORS.length],
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      indexAxis: spec.horizontal ? 'y' : 'x',
+      plugins: { legend: { display: spec.series.length > 1 } },
+      scales: {
+        x: { beginAtZero: true, title: { display: !!spec.x_label, text: spec.x_label } },
+        y: { beginAtZero: true, title: { display: !!spec.y_label, text: spec.y_label } },
+      },
+    },
+  });
+}
+
+fetch('../data/deep-analysis.json').then(response => {
+  if (!response.ok) throw new Error(`deep-analysis.json: HTTP ${response.status}`);
+  return response.json();
+}).then(data => {
+  const h = data.headline;
+  document.getElementById('sub').textContent =
+    `${data.meta.tickets} tickets - generated ${data.meta.generated_at.slice(0, 10)}`;
+  const tiles = [
+    [h.programme_tickets, 'Accounting-programme tickets'],
+    [h.programme_ticket_pct + '%', 'Share of tickets'],
+    [h.programme_size_points, 'Programme Size points'],
+    [h.structured_or_recurring_tickets, 'Structured/recurring tickets'],
+    [h.structured_or_recurring_pct + '%', 'Structured/recurring share'],
+    [data.taxonomy_audit.low_confidence_pct + '%', 'Low-confidence labels'],
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(([value, label]) =>
+    `<div class="tile"><strong>${value}</strong><span>${label}</span></div>`).join('');
+  data.charts.forEach(spec => render(spec, document.getElementById('grid')));
+}).catch(error => {
+  document.getElementById('grid').textContent = error.message;
+});
+</script>
+</body>
+</html>

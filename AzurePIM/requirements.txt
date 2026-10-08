@@ -1,0 +1,7 @@
+pystray==0.19.5
+Pillow==10.4.0
+azure-identity==1.17.1
+azure-mgmt-authorization==4.0.0
+azure-mgmt-resource==23.1.1
+requests==2.32.3
+winotify==1.1.0

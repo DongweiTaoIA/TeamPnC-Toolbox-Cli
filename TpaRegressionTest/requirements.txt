@@ -1,0 +1,9 @@
+step 1. check the azure DevOps 
+
+step 2. sign in to FNCT/ACCP based on the ticket status, this is the first test, we can call it sign-in test.
+
+if 2 fails, the whole test fails,
+
+step 3. we need to PIM and upload some files to the azure storage.
+
+

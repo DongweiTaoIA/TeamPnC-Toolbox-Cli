@@ -1,0 +1,95 @@
+# Topics and work patterns for Team PnC.
+#
+# Drafted from Sprints 104-107 (2026-01-07 .. 2026-03-03) by reading ticket titles and
+# descriptions. `match` entries are regular expressions tested against title + tags +
+# description (case-insensitive), so labelling works today without Azure OpenAI.
+# Edit freely, then set reviewed: true.
+#
+# Topics = what the work is about. Work patterns = the kind of work done.
+
+reviewed: false
+
+topics:
+  - name: DW Accounting Model (DW2)
+    definition: New accounting model for DW2, including the numbered 5xx work items, transaction types and GL uploads.
+    match: ['dw2 am', 'dw accounting model', '\bnew dw2\b']
+  - name: DW Honda Accounting Model (DW3)
+    definition: The same accounting model rolled out for Honda/Acura as DW3, numbered 6xx.
+    match: ['dw honda', 'dw3 am', '\bnew dw3\b', '\bhonda\b', '\bacura\b']
+  - name: Creditor Monthly
+    definition: Creditor Monthly product - payments, PAD, certificates, monthly premium screens and WebAPI.
+    match: ['creditor monthly', '\bcr monthly\b', 'cr regular payments', 'monthly premium', '\bpad\b']
+  - name: Historical contracts
+    definition: Reinitialising, voiding, reinstating or remitting historical contracts, usually via SQL scripts.
+    match: ['historical contract', 'historical data', 'reinitialize', 'devoid', 'auto-voided']
+  - name: GL and data upload
+    definition: Uploading or restructuring configuration/GL tables (cfGLAccount, cfGLProgramGroup, ReversalMapping...).
+    match: ['data upload', 'gl uploader', 'cfgl', 'glextract', 'reversalmapping', 'table structure changes']
+  - name: Payments and remittance
+    definition: Payment entry, cash deposit, cash transfer, remittance, chargeback and reconciliation.
+    match: ['payment', 'remittance', 'cash deposit', 'cash transfer', 'chargeback', 'reconcil', 'cheque']
+  - name: Batch jobs and reports
+    definition: Scheduled batch jobs (NDPY...) and DPR reports.
+    match: ['ndpy\d', '\bdpr\d', 'batch job', 'aging report', 'one statement', '\breport\b']
+  - name: Contracts and cancellations
+    definition: Contract lifecycle - cancellation, reinstatement, refunds, expiry, overfund, debt waiver.
+    match: ['cancellation', 'reinstate', 'refund', 'overfund', 'debt waiver', 'expir']
+  - name: Rates, programs and products
+    definition: Rate files, plan codes, program/product setup and renaming.
+    match: ['\brate', 'plan code', 'program.*(setup|rename)', 'promo code', 'branding fee']
+  - name: Dealer and billing
+    definition: Dealer billing, dealer statements, dealer suspense and invoicing.
+    match: ['dealer', 'invoic', 'suspense', 'billing']
+  - name: WebAPI and UI migration
+    definition: Moving UniFI 1 screens and logic to WebAPI/UniFI 2, including edmx and endpoint changes.
+    match: ['webapi', 'web api', 'edmx', '\bui\b', 'screen', '\bu1\b', '\bu2\b', 'endpoint']
+  - name: Test tooling and automation
+    definition: Accounting model testing app, Selenium automation and automated test monitoring.
+    match: ['testing app', 'testing tool', 'selenium', 'automated test', 'full cycle test', 'regression test']
+  - name: Security and compliance
+    definition: Pen tests, SOC 2 audit evidence, vulnerability investigations and monitoring tooling.
+    match: ['pen test', 'soc 2', 'dynatrace', 'disclosure of technical information', 'vulnerab', '\bxss\b']
+  - name: Other
+    definition: Does not fit any topic above.
+    match: []
+
+work_patterns:
+  # A ticket gets ONE work pattern: the first entry below whose regex matches.
+  # Keep the most specific patterns at the top.
+  - name: Recurring operational task
+    definition: A routine task repeated every sprint or month (test monitoring, uploads, scheduled reports).
+    match: ['monitoring and rerunning', 'sherlock upload', 'run one statement', 'sal finance aging',
+            'automated tests - sprint']
+  - name: Release and migration event
+    definition: A dated release/migration ticket that bundles what goes to production on that date.
+    match: ['^migration\s*-', '^\d*\.?\s*migration\b']
+  - name: Numbered migration step
+    definition: One numbered step of a larger accounting-model migration (5xx for DW2, 6xx for DW3).
+    match: ['-\s*\d{3}\s*-', 'data upload \d', 'historical contracts\s*-\s*#\d']
+  - name: Production support
+    definition: Reacting to an incident, failed job or urgent customer-reported problem (usually an INC number).
+    match: ['\binc\d{6,}', '\bprb\d{6,}', 'urgent', '=?fail', 'investigation', 'rerun']
+  - name: Data fix script
+    definition: Correcting existing data with a SQL script rather than changing application behaviour.
+    match: ['data fix', 'fix data', 'cleanup', 'orphaned data', '\bscript\b', 'reinitialize', 'devoid']
+  - name: Program setup
+    definition: Setting up or configuring a new program, product, rate or dealer using the standard steps.
+    match: ['new rate', 'new plan code', '\bsetup\b', 'set up', 'onboarding', 'rename', 'new dw\d']
+  - name: Testing and signoff
+    definition: Test-only work items, regression testing and business signoff.
+    match: ['test only', 'test-only', 'signoff', 'sign off', '\bqc\b', 'regression test', 'testing app',
+            'testing tool']
+  - name: Bug fix
+    definition: Correcting incorrect application behaviour.
+    match: ['\bissue\b', '\berror\b', 'not calculating', 'wrong', 'discrepanc', 'missing', 'not showing',
+            'not allowing', 'grayed out', 'display issue']
+  - name: Enhancement
+    definition: New or changed application behaviour requested by the business.
+    match: ['\badd\b', '\bnew\b', 'update', 'change', 'improve', 'enhance', 'increase', 'modify',
+            'create', 'remove', 'replace', 'hide', 'block', 'unblock', 'switch', 'allow']
+  - name: Other
+    definition: Does not fit any work pattern above.
+    match: []
+  - name: Other
+    definition: Does not fit any work pattern above.
+    match: []

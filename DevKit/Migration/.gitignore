@@ -1,0 +1,12 @@
+# Browser profile created by scripts/snow_form.py -- contains live ServiceNow session cookies.
+.auth/
+
+# Screenshots and form dumps; may contain ticket content.
+.artifacts/
+
+.venv/
+__pycache__/
+*.py[cod]
+
+# Saved ServiceNow API responses used for field discovery.
+doc/snow-item.json

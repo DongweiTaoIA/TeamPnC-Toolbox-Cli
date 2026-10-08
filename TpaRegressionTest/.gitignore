@@ -1,0 +1,11 @@
+# Local secrets — never commit
+.azure_pat
+
+# PyInstaller build artifacts
+build/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

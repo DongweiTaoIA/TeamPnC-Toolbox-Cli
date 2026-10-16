@@ -277,6 +277,22 @@ class AdoClient:
                 people[unique.casefold()] = (unique, display)
         return next(iter(people.values())) if len(people) == 1 else None
 
+    def get_changesets(self, ids: list[int]) -> list[dict]:
+        """Raw TFVC changesets (author, createdDate, full comment)."""
+        found: list[dict] = []
+        for start in range(0, len(ids), 100):
+            data = self._request("POST", "tfvc/changesetsbatch", org_level=True,
+                                 json={"changesetIds": ids[start:start + 100], "commentLength": 4000})
+            found.extend(data.get("value", []))
+        return found
+
+    def activate_task(self, task_id: int, assignee: str) -> WorkItem:
+        """Set the task to Active and assign it; Resolved/Closed tasks are left alone."""
+        task = self.get_work_item(task_id)
+        if task.state.lower() in ("active", "resolved", "closed"):
+            return task
+        return self._update_work_item(task_id, {"System.State": "Active", "System.AssignedTo": assignee})
+
     def resolve_task(self, task_id: int, assignee: str) -> WorkItem:
         """Set the task to Resolved and assign it; the process only allows Resolved from Active."""
         task = self.get_work_item(task_id)

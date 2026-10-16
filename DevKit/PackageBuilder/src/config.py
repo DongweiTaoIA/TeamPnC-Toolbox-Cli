@@ -56,6 +56,11 @@ class Settings:
     teams_channel_url: str = "https://teams.microsoft.com/v2/"
     teams_team: str = "*IAP-LS-IT-Dealer Services Team"
     teams_channel: str = "General"
+    # Holds one "YYYY-MM-DD Release NNN" folder per migration.
+    migration_root: str = r"L:\IS\SUPPORT\DP\Migration"
+    email_templates: str = r"L:\IS\SUPPORT\DP\Migration\_Documents\Emails template"
+    # Leave empty to use the newest Visual Studio's tf.exe.
+    tf_exe: str = ""
 
 
 def load_settings() -> Settings:

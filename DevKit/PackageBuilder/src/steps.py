@@ -19,7 +19,7 @@ class MigrationStep:
 MIGRATION_STEPS = (
     MigrationStep("10 Days before - book resources", -10, action="book_resources"),
     MigrationStep("9 Days before - DPACCP Refresh", -9, action="dpaccp_refresh"),
-    MigrationStep("3 Days before", -3),
+    MigrationStep("3 Days before", -3, action="change_email"),
     MigrationStep("2 Days before", -2),
     MigrationStep("Migration Day", 0),
     MigrationStep("Day After Migration", 1),

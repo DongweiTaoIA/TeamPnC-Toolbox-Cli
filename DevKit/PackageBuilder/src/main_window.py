@@ -11,13 +11,19 @@ from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, QUrl, Si
 from PySide6.QtGui import QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QInputDialog, QMainWindow, QMessageBox, QProgressBar, QSplitter,
+    QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QInputDialog, QMainWindow, QMessageBox, QProgressBar,
+    QSplitter,
     QStackedWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .ado import AdoClient, AdoError, Comment, TicketCreationResult, WorkItem
 from .booking import FormSpec, booking_forms, refresh_forms, refresh_post
 from .config import DATA_DIR, load_settings
+from .emails import CODE_FREEZE, KINDS, MIGRATION_LIST, code_freeze_draft, list_subject, migration_list_draft, show_draft
+from .migration_list import ListRow, ListWrite, changeset_rows, workbook_name, write_changesets
+from .outlook import ChangeLookup, lookup_change, open_email, open_path
+from .tfvc import SOLUTIONS, CompareResult, TfsSolution, compare_solution
+from .tpa import COMPONENTS as TPA_COMPONENTS, ReleaseCommits, ReleaseList, ReleaseRun, TpaClient
 from .schedule import MigrationEntry, pick_current_and_next, read_schedule
 from .servicenow import ServiceNowRunner
 from .sharepoint import SharePointDownloader
@@ -160,6 +166,22 @@ class MainWindow(QMainWindow):
         self._user_email = ""
         self._full_names: dict[str, str] = {}
         self._names_loading: set[str] = set()
+        # migration key -> Outlook/folder lookup result, or the error text
+        self._changes: dict[str, ChangeLookup | str] = {}
+        self._changes_loading: set[str] = set()
+        # migration key -> ACCP -> Main comparison per solution, or the error text
+        self._tfs_results: dict[str, list[CompareResult] | str] = {}
+        self._tfs_running: set[str] = set()
+        self._list_writes: dict[str, ListWrite | str] = {}
+        self._list_writing: set[str] = set()
+        self._drafting: set[str] = set()  # "<migration key>|<email kind>"
+        # TPA pipeline runs per component key; selections and writes per (migration key, component key)
+        self._tpa_lists: dict[str, ReleaseList | str] = {}
+        self._tpa_loading: set[str] = set()
+        self._tpa_selected: dict[tuple[str, str], ReleaseCommits | str] = {}
+        self._tpa_busy: set[tuple[str, str]] = set()
+        self._tpa_writes: dict[tuple[str, str], ListWrite | str] = {}
+        self._resolving: set[int] = set()  # ADO task ids being resolved
 
         self._build_ui()
         QShortcut(QKeySequence(Qt.Key.Key_F5), self).activated.connect(self._load_schedule)
@@ -342,6 +364,33 @@ class MainWindow(QMainWindow):
             self._start_booking(RUN_MODES[action])
         elif action == "test-teams":
             self._start_teams_test()
+        elif action == "check-email" and self.selected is not None:
+            self._ensure_change(self.selected, force=True)
+        elif action == "start-3days":
+            self._start_three_days()
+        elif action == "resolve-3days":
+            self._resolve_three_days()
+        elif action == "write-list":
+            self._write_list()
+        elif action.startswith("draft-email/"):
+            self._draft_email(action.split("/", 1)[1])
+        elif action.startswith("open-sent/"):
+            self._open_sent(action.split("/", 1)[1])
+        elif action.startswith("tpa-"):
+            verb, _, rest = action.partition("/")
+            component, _, run = rest.partition("/")
+            if verb == "tpa-reload":
+                self._ensure_tpa(force=True)
+            elif verb == "tpa-select" and run.isdigit():
+                self._tpa_select(component, int(run))
+            elif verb == "tpa-copy":
+                self._tpa_copy(component)
+            elif verb == "tpa-write":
+                self._tpa_write(component)
+        elif action.startswith("tfs-path/"):
+            self._change_tfs_path(action.split("/", 1)[1])
+        elif action in {"open-email", "open-folder", "open-proof"}:
+            self._open_change_item(action)
 
     # ---------- migration schedule ----------
     def _load_schedule(self) -> None:
@@ -863,7 +912,40 @@ class MainWindow(QMainWindow):
             body += f"<h4>Checklist</h4><ul>{items}</ul>"
         card = self.selected
         actions: tuple = ()
-        if step.action and card is not None and card.entry is not None:
+        if step.action == "change_email" and card is not None and card.entry is not None:
+            self._ensure_change(card)
+            entry = card.entry
+            missing = self._change_missing(entry)
+            self._ensure_tpa()
+            body = (self._change_html(entry) + self._start_html(missing, task, done) + self._tfs_html(entry)
+                    + self._tpa_html(card, missing) + self._emails_html(card, missing) + body)
+            loading = entry.key in self._changes_loading
+            finished = done or bool(task and task.state.lower() in DONE_STATES)
+            comparing = entry.key in self._tfs_running
+            active = bool(task and task.state.lower() == "active")
+            compared = self._tfs_results.get(entry.key)
+            new = sum(len(r.included) for r in compared) if isinstance(compared, list) else 0
+            list_url = self._list_url(entry)
+            actions = (("check-email", "Check email again", not loading,
+                        "Search Outlook again for the Action required - CHG email and re-check the folder."),
+                       ("start-3days", "Compare again" if compared is not None else
+                        "Get latest & compare" if active else "Start tasks",
+                        not missing and task is not None and not finished and not comparing,
+                        "Already done." if finished else "No matching ADO task." if task is None
+                        else "Not ready: " + "; ".join(missing) if missing
+                        else ("" if active else "Set the ADO task to Active, then ")
+                        + "Get Latest of ACCP and Main and list the ACCP changesets not merged into Main. "
+                          "Never merges."),
+                       ("write-list", "Write to migration list",
+                        bool(new) and bool(list_url) and not comparing and entry.key not in self._list_writing,
+                        "Compare first." if compared is None else "No migration list link (_migration.url) "
+                        "in the migration folder." if not list_url else
+                        f"Add the changesets to {workbook_name(list_url)} in Excel; ones already listed are skipped."),
+                       ("resolve-3days", "Resolve task",
+                        task is not None and not finished and task.id not in self._resolving,
+                        "Already resolved." if finished else "No matching ADO task." if task is None
+                        else f"Set ADO task #{task.id} to Resolved and assign it to you."))
+        elif step.action and card is not None and card.entry is not None:
             if step.action == "book_resources":
                 self._ensure_full_names(card)
             forms = self._step_forms(step.action, card.entry)
@@ -944,6 +1026,731 @@ class MainWindow(QMainWindow):
             self._status(f"Couldn't look up full names: {error}", "error")
 
         self._run("Looking up full names\u2026", lambda: self._lookup_full_names(names), done, failed)
+
+    # ---------- 3 days before: change email and migration folder ----------
+    def _ensure_change(self, card: MigrationCard, force: bool = False) -> None:
+        entry = card.entry
+        key = entry.key
+        if key in self._changes_loading or (key in self._changes and not force):
+            return
+        self._changes_loading.add(key)
+        root = self.settings.migration_root
+
+        def done(result: ChangeLookup) -> None:
+            self._changes_loading.discard(key)
+            self._changes[key] = result
+            if result.email:
+                self._status(f"Found {result.email.change or 'the change email'} for {fmt_date(entry.prod_date)}", "ok")
+            else:
+                self._status(f"No change email yet for {fmt_date(entry.prod_date)}", "info")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        def failed(error: str) -> None:
+            self._changes_loading.discard(key)
+            self._changes[key] = error
+            self._status(f"Couldn't read Outlook: {error}", "error")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run(f"Searching Outlook for the {fmt_date(entry.prod_date)} change email\u2026",
+                  lambda: lookup_change(entry.prod_date, root), done, failed)
+        if force and card is self.selected:
+            self._refresh_details(card)
+
+    def _change_html(self, entry: MigrationEntry) -> str:
+        result = self._changes.get(entry.key)
+        out = f"<h4>Email \u00b7 Action required - CHG\u2026 for {html.escape(fmt_date(entry.prod_date))}</h4>"
+        if entry.key in self._changes_loading:
+            return out + "<p>" + html_chip("Searching Outlook\u2026", "amber") + "</p>"
+        if result is None:
+            return out
+        if isinstance(result, str):
+            return out + "<p>" + html_chip("Couldn't read Outlook", "red") + f" &nbsp;{html.escape(result)}</p>"
+        email, folder = result.email, result.folder
+        if email is None:
+            out += ("<p>" + html_chip("Not received yet", "amber") + " &nbsp;No \u201cAction required - CHG\u2026 "
+                    f"for scheduled Migration on {html.escape(fmt_date(entry.prod_date))}\u201d email in the Inbox "
+                    "or its subfolders. Use <b>Check email again</b> once it arrives.</p>")
+        else:
+            open_link = " &nbsp;<a href='action:open-email'>Open in Outlook</a>"
+            out += _rows([
+                ("Change request", f"<b>{html.escape(email.change or '(not in subject)')}</b>"),
+                ("Subject", html.escape(email.subject) + open_link),
+                ("Received", html.escape(email.received.strftime("%a %b %d, %Y %I:%M %p"))),
+                ("Team input due", f"End of day <b>{html.escape(fmt_date(email.deadline))}</b> &nbsp;"
+                 + html_chip(relative_days(email.deadline), "slate") if email.deadline
+                 else "<i>(not found - check the email)</i>"),
+            ])
+
+        out += "<h4>Migration folder</h4>"
+        if not folder.path:
+            out += ("<p>" + html_chip("Not found", "red") + " &nbsp;No "
+                    f"\u201c{entry.prod_date.isoformat()} Release \u2026\u201d folder in "
+                    f"{html.escape(self.settings.migration_root)}.</p>")
+            if folder.note:
+                out += f"<p>{html.escape(folder.note)}</p>"
+            return out
+        if email is None:
+            source = html_chip("no email yet", "slate")
+        elif folder.in_email:
+            source = html_chip("named in the email", "green")
+        else:
+            source = html_chip("the email names a different folder - check it", "amber")
+        pairs = [
+            ("Folder", f"{html.escape(folder.path)} &nbsp;<a href='action:open-folder'>Open</a>"),
+            ("Email check", source),
+        ]
+        if folder.exists:
+            proof = (html_chip(f"{folder.proof_items} item{'s' if folder.proof_items != 1 else ''}",
+                               "green" if folder.proof_items else "slate")
+                     + " &nbsp;<a href='action:open-proof'>Open</a>") if folder.proof_exists else html_chip("missing", "red")
+            pairs.append(("Proof of Tests", proof))
+            pairs.append(("Contents", "<br>".join(html.escape(n) for n in folder.contents) or "<i>(empty)</i>"))
+        if folder.note:
+            pairs.append(("Note", html.escape(folder.note)))
+        return out + _rows(pairs)
+
+    def _change_missing(self, entry: MigrationEntry) -> list[str]:
+        """What still blocks the 3 Days before tasks; empty when everything checks out."""
+        if entry.key in self._changes_loading:
+            return ["still searching Outlook"]
+        result = self._changes.get(entry.key)
+        if result is None:
+            return ["Outlook not searched yet"]
+        if isinstance(result, str):
+            return [f"couldn't read Outlook ({result})"]
+        missing = []
+        if result.email is None:
+            missing.append("the Action required - CHG email hasn't arrived")
+        folder = result.folder
+        if not folder.path:
+            missing.append(f"no {entry.prod_date.isoformat()} Release folder in {self.settings.migration_root}")
+        elif not folder.exists:
+            missing.append(f"can't open {folder.path}")
+        elif not folder.proof_exists:
+            missing.append("the migration folder has no Proof of Tests folder")
+        if result.email is not None and folder.path and not folder.in_email:
+            missing.append("the email names a different folder")
+        return missing
+
+    @staticmethod
+    def _start_html(missing: list[str], task: WorkItem | None, done: bool) -> str:
+        out = "<h4>Tasks</h4>"
+        if done or (task and task.state.lower() in DONE_STATES):
+            return out + "<p>" + html_chip("Done", "green") + "</p>"
+        if missing:
+            items = "".join(f"<li>{html.escape(m)}</li>" for m in missing)
+            return out + "<p>" + html_chip("Not ready", "amber") + " &nbsp;Can't start yet:</p>" + f"<ul>{items}</ul>"
+        if task is None:
+            return out + "<p>" + html_chip("No matching ADO task", "amber") + "</p>"
+        state = (" &nbsp;The ADO task is Active." if task.state.lower() == "active"
+                 else f" &nbsp;<b>Start tasks</b> sets ADO task #{task.id} to Active, then gets latest and compares "
+                      "ACCP with Main.")
+        return out + "<p>" + html_chip("All checks passed", "green") + state + "</p>"
+
+    def _start_three_days(self) -> None:
+        card = self.selected
+        current = self.tree.currentItem()
+        if card is None or card.entry is None or current is None:
+            return
+        planned: PlannedStep = (current.parent() or current).data(0, ROLE_STEP)
+        task = planned.task
+        missing = self._change_missing(card.entry)
+        if planned.step.action != "change_email" or task is None or missing:
+            if missing:
+                QMessageBox.information(self, planned.step.name, "Can't start yet:\n\n\u2022 " + "\n\u2022 ".join(missing))
+            return
+        if task.state.lower() == "active":
+            self._compare_changesets(card)
+            return
+        if not self._user_email:
+            self._status("Your Azure DevOps user isn't loaded yet - try again in a moment.", "error")
+            return
+        email = self._user_email
+        self._run(f"Setting task #{task.id} to Active\u2026", lambda: self._client().activate_task(task.id, email),
+                  lambda active: self._on_task_activated(card, active),
+                  lambda error: self._status(f"Couldn't activate task #{task.id}: {error}", "error"))
+
+    def _on_task_activated(self, card: MigrationCard, task: WorkItem) -> None:
+        if card.ticket is not None:
+            self._children.pop(card.ticket.id, None)
+        self._load_tasks(card)
+        self._refresh_today()
+        self._status(f"Task #{task.id} is {task.state} and assigned to {task.assigned_to or 'you'}.", "ok")
+        self._compare_changesets(card)
+
+    def _three_days_outstanding(self, entry: MigrationEntry) -> list[str]:
+        """3 Days before items not done in the app this session; emails are checked in Outlook."""
+        out = list(self._change_missing(entry))
+        compared = self._tfs_results.get(entry.key)
+        if not isinstance(compared, list):
+            out.append("ACCP \u2192 Main changesets not compared")
+        elif any(r.included for r in compared) and not isinstance(self._list_writes.get(entry.key), ListWrite):
+            out.append("ACCP \u2192 Main changesets not written to the migration list")
+        for component in TPA_COMPONENTS:
+            key = (entry.key, component.key)
+            pick = self._tpa_selected.get(key)
+            if not isinstance(pick, ReleaseCommits):
+                out.append(f"{component.title}: no release selected")
+            elif pick.commits and not isinstance(self._tpa_writes.get(key), ListWrite):
+                out.append(f"{component.title}: commits not written to {component.sheet}")
+        result = self._changes.get(entry.key)
+        sent = result.sent if isinstance(result, ChangeLookup) else {}
+        out += [f"{kind.title} email not sent" for kind in KINDS if sent.get(kind.id) is None]
+        return out
+
+    def _resolve_three_days(self) -> None:
+        card = self.selected
+        current = self.tree.currentItem()
+        if card is None or card.entry is None or current is None:
+            return
+        planned: PlannedStep = (current.parent() or current).data(0, ROLE_STEP)
+        task = planned.task
+        if planned.step.action != "change_email" or task is None or task.id in self._resolving:
+            return
+        if not self._user_email:
+            self._status("Your Azure DevOps user isn't loaded yet - try again in a moment.", "error")
+            return
+        outstanding = self._three_days_outstanding(card.entry)
+        text = f"Resolve ADO task #{task.id} ({task.title}) and assign it to you?"
+        if outstanding:
+            text += ("\n\nNot done in the app this session (they may have been done earlier or by hand):\n\u2022 "
+                     + "\n\u2022 ".join(outstanding))
+        default = QMessageBox.StandardButton.No if outstanding else QMessageBox.StandardButton.Yes
+        answer = QMessageBox.question(self, planned.step.name, text,
+                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, default)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        email = self._user_email
+        self._resolving.add(task.id)
+
+        def done(resolved: WorkItem) -> None:
+            self._resolving.discard(task.id)
+            self._on_task_resolved(card, resolved)
+
+        def failed(error: str) -> None:
+            self._resolving.discard(task.id)
+            self._status(f"Couldn't resolve task #{task.id}: {error}", "error")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run(f"Resolving task #{task.id}\u2026", lambda: self._client().resolve_task(task.id, email), done, failed)
+        self._refresh_details(card)
+
+    # ---------- 3 days before: ACCP -> Main changesets ----------
+    def _tfs_path(self, solution: TfsSolution) -> str:
+        return self.state.get_setting(f"tfs_path.{solution.name}", solution.default_path)
+
+    def _change_tfs_path(self, name: str) -> None:
+        solution = next((s for s in SOLUTIONS if s.name == name), None)
+        if solution is None:
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, f"Local folder mapped to $/{solution.name}", self._tfs_path(solution))
+        if not folder:
+            return
+        self.state.set_setting(f"tfs_path.{solution.name}", str(Path(folder)))
+        if self.selected is not None:
+            self._refresh_details(self.selected)
+
+    def _list_url(self, entry: MigrationEntry) -> str:
+        result = self._changes.get(entry.key)
+        return result.folder.list_url if isinstance(result, ChangeLookup) else ""
+
+    def _compare_changesets(self, card: MigrationCard) -> None:
+        key = card.entry.key
+        if key in self._tfs_running:
+            return
+        self._tfs_running.add(key)
+        self._list_writes.pop(key, None)
+        paths = {s.name: self._tfs_path(s) for s in SOLUTIONS}
+        tf_exe = self.settings.tf_exe
+
+        def fn() -> list[CompareResult]:
+            details = lambda ids: self._client().get_changesets(ids)  # noqa: E731
+            return [compare_solution(s, paths[s.name], details, tf_exe) for s in SOLUTIONS]
+
+        def done(results: list[CompareResult]) -> None:
+            self._tfs_running.discard(key)
+            self._tfs_results[key] = results
+            errors = [r for r in results if r.error]
+            found = sum(len(r.included) for r in results)
+            if errors:
+                self._status(f"Compare finished with errors: {errors[0].error}", "error")
+            else:
+                self._status(f"{found} changeset{'s' if found != 1 else ''} in ACCP not merged into Main.", "ok")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        def failed(error: str) -> None:
+            self._tfs_running.discard(key)
+            self._tfs_results[key] = error
+            self._status(f"Compare failed: {error}", "error")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run("Getting latest and comparing ACCP with Main\u2026", fn, done, failed)
+        if card is self.selected:
+            self._refresh_details(card)
+
+    def _tfs_html(self, entry: MigrationEntry) -> str:
+        key = entry.key
+        out = "<h4>Changesets to migrate \u00b7 ACCP \u2192 Main</h4>"
+        if key in self._tfs_running:
+            out += "<p>" + html_chip("Getting latest and comparing\u2026", "amber") + "</p>"
+        results = self._tfs_results.get(key)
+        if isinstance(results, str):
+            out += "<p>" + html_chip("Compare failed", "red") + f" &nbsp;{html.escape(results)}</p>"
+        by_name = {r.solution.name: r for r in results} if isinstance(results, list) else {}
+        list_url = self._list_url(entry)
+        if list_url:
+            out += _rows([("Migration list", f"<a href='{html.escape(list_url)}'>"
+                                             f"{html.escape(workbook_name(list_url))}</a>")])
+        for solution in SOLUTIONS:
+            path = self._tfs_path(solution)
+            change = f" &nbsp;<a href='action:tfs-path/{solution.name}'>Change</a>"
+            pairs = [("Local folder", html.escape(path) + change
+                      + ("" if Path(path).is_dir() else " &nbsp;" + html_chip("not found", "red"))),
+                     ("Branches", html.escape(f"{solution.source} \u2192 {solution.target}")),
+                     ("Sheet", html.escape(solution.sheet))]
+            result = by_name.get(solution.name)
+            table = ""
+            if result is not None:
+                for get in result.gets:
+                    text = (f"{get.updated} file{'s' if get.updated != 1 else ''} updated" if get.updated
+                            else "up to date")
+                    chip = html_chip(text, "green")
+                    if get.problems:
+                        chip += " &nbsp;" + html_chip(f"{len(get.problems)} conflict/warning line(s)", "amber")
+                        chip += "<br>" + "<br>".join(html.escape(p) for p in get.problems[:5])
+                    pairs.append((f"Get latest {get.branch.rsplit('/', 1)[-1]}", chip))
+                if result.error:
+                    pairs.append(("Error", html_chip(result.error, "red")))
+                else:
+                    included = result.included
+                    pairs.append(("To migrate", html_chip(f"{len(included)} changeset{'s' if len(included) != 1 else ''}",
+                                                         "blue" if included else "slate")))
+                    if result.excluded:
+                        pairs.append(("Left out", "[Do not merge]: " + ", ".join(
+                            str(c.id) for c in result.excluded)))
+                    table = self._changeset_table(included)
+            out += f"<p><b>{html.escape(solution.name)}</b></p>" + _rows(pairs) + table
+        write = self._list_writes.get(key)
+        if key in self._list_writing:
+            out += "<p>" + html_chip("Writing to the migration list in Excel\u2026", "amber") + "</p>"
+        elif isinstance(write, str):
+            out += "<p>" + html_chip("Couldn't write the migration list", "red") + f" &nbsp;{html.escape(write)}</p>"
+        elif isinstance(write, ListWrite):
+            rows = []
+            for sheet in write.sheets:
+                text = (f"added {len(sheet.added)} (rows {sheet.first_row}\u2013{sheet.last_row})" if sheet.added
+                        else "nothing new")
+                if sheet.skipped:
+                    text += f", {len(sheet.skipped)} already listed"
+                rows.append((sheet.sheet, html_chip(text, "green" if sheet.added else "slate")))
+            out += (f"<h4>Written to {html.escape(write.workbook)}</h4>" + _rows(rows)
+                    + "<p>Check the rows in Excel. The app doesn't save; AutoSave may already have saved them.</p>")
+        return out
+
+    @staticmethod
+    def _changeset_table(changesets: list) -> str:
+        if not changesets:
+            return ""
+        cells = "".join(
+            f"<tr><td>{c.id}{'*' if c.partial else ''}</td><td>{html.escape(c.author)}</td>"
+            f"<td>{html.escape(c.created.strftime('%m/%d/%Y %I:%M %p') if c.created else '')}</td>"
+            f"<td>{html.escape(c.comment)}</td></tr>"
+            for c in changesets)
+        head = "<tr><td class='k'>Changeset</td><td class='k'>Checked in by</td><td class='k'>Date</td>" \
+               "<td class='k'>Comment</td></tr>"
+        return f"<table cellspacing='0' cellpadding='3'>{head}{cells}</table>"
+
+    def _write_list(self) -> None:
+        card = self.selected
+        if card is None or card.entry is None:
+            return
+        key = card.entry.key
+        results = self._tfs_results.get(key)
+        url = self._list_url(card.entry)
+        if not isinstance(results, list) or not url or key in self._list_writing:
+            return
+        sheets = {r.solution.sheet: changeset_rows(r.included) for r in results if not r.error}
+        counts = "\n".join(f"\u2022 {len(rows)} to {sheet}" for sheet, rows in sheets.items())
+        failed_names = [r.solution.name for r in results if r.error]
+        warning = (f"\n\n{', '.join(failed_names)} failed to compare and will be skipped." if failed_names else "")
+        answer = QMessageBox.question(
+            self, "Write to migration list",
+            f"Add the changesets to {workbook_name(url)}?\n\n{counts}{warning}\n\n"
+            "Changesets already on a sheet are skipped. Excel opens the workbook and leaves it open for you "
+            "to check; AutoSave may save the changes right away.")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._list_writing.add(key)
+
+        def done(result: ListWrite) -> None:
+            self._list_writing.discard(key)
+            self._list_writes[key] = result
+            added = sum(len(s.added) for s in result.sheets)
+            self._status(f"Added {added} changeset{'s' if added != 1 else ''} to {result.workbook}.", "ok")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        def failed(error: str) -> None:
+            self._list_writing.discard(key)
+            self._list_writes[key] = error
+            self._status(f"Couldn't write the migration list: {error}", "error")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run(f"Writing to {workbook_name(url)}\u2026", lambda: write_changesets(url, sheets), done, failed)
+        self._refresh_details(card)
+
+    # ---------- 3 days before: TPA releases ----------
+    def _ensure_tpa(self, force: bool = False) -> None:
+        for component in TPA_COMPONENTS:
+            key = component.key
+            if key in self._tpa_loading or (key in self._tpa_lists and not force):
+                continue
+            self._tpa_loading.add(key)
+
+            def done(result: ReleaseList, key=key) -> None:
+                self._tpa_loading.discard(key)
+                self._tpa_lists[key] = result
+                if self.selected is not None:
+                    self._refresh_details(self.selected)
+
+            def failed(error: str, key=key) -> None:
+                self._tpa_loading.discard(key)
+                self._tpa_lists[key] = error
+                self._status(f"Couldn't load TPA releases: {error}", "error")
+                if self.selected is not None:
+                    self._refresh_details(self.selected)
+
+            self._run(f"Loading {component.title} releases\u2026",
+                      lambda c=component: TpaClient().list_releases(c), done, failed)
+        if force and self.selected is not None:
+            self._refresh_details(self.selected)
+
+    @staticmethod
+    def _stage_html(run: ReleaseRun) -> str:
+        marks = {"succeeded": ("\u2713", SUCCESS), "succeededWithIssues": ("\u2713", WARNING),
+                 "failed": ("\u2717", DANGER), "canceled": ("\u2013", MUTED), "skipped": ("\u2013", MUTED)}
+        parts = []
+        for stage in run.stages:
+            mark, color = marks.get(stage.result, ("\u25cb", MUTED) if stage.state == "pending"
+                                    else ("\u25d0", INFO))
+            weight = "700" if stage.name.upper() == "ACCP" else "400"
+            parts.append(f"<span style='color:{color}; font-weight:{weight}'>{html.escape(stage.name)} {mark}</span>")
+        return " &nbsp;".join(parts)
+
+    def _tpa_html(self, card: MigrationCard, missing: list[str]) -> str:
+        entry = card.entry
+        out = ""
+        for component in TPA_COMPONENTS:
+            listed = self._tpa_lists.get(component.key)
+            name = listed.pipeline if isinstance(listed, ReleaseList) else "release pipeline"
+            reload = "" if component.key in self._tpa_loading else \
+                f" &nbsp;<a href='action:tpa-reload/{component.key}'>Reload</a>"
+            out += f"<h4>{html.escape(component.title)} \u00b7 {html.escape(name)}</h4>"
+            pick = (self._tpa_selected.get((entry.key, component.key)))
+            busy = (entry.key, component.key) in self._tpa_busy
+            if component.key in self._tpa_loading:
+                out += "<p>" + html_chip("Loading pipeline runs\u2026", "amber") + "</p>"
+            elif isinstance(listed, str):
+                out += "<p>" + html_chip("Couldn't load", "red") + f" &nbsp;{html.escape(listed)}{reload}</p>"
+            elif isinstance(listed, ReleaseList):
+                chosen = pick.run.id if isinstance(pick, ReleaseCommits) else None
+                rows = ""
+                for run in listed.runs:
+                    if run.id == chosen:
+                        action = html_chip("Selected", "green")
+                    elif run.accp_ok and not missing and not busy:
+                        action = f"<a href='action:tpa-select/{component.key}/{run.id}'>Select</a>"
+                    else:
+                        action = ""
+                    style = "" if run.accp_ok else f" style='color:{MUTED}'"
+                    when = run.queued.strftime("%b %d %I:%M %p") if run.queued else ""
+                    rows += (f"<tr{style}><td><a href='{html.escape(run.web_url)}'>#{html.escape(run.number)}</a></td>"
+                             f"<td>{html.escape(run.commit[:8])}</td><td>{html.escape(when)}</td>"
+                             f"<td>{self._stage_html(run)}</td><td>{action}</td></tr>")
+                head = ("<tr><td class='k'>Run</td><td class='k'>Commit</td><td class='k'>Queued</td>"
+                        "<td class='k'>Stages</td><td></td></tr>")
+                accp = sum(1 for r in listed.runs if r.accp_ok)
+                hint = ("Only runs with <b>ACCP \u2713</b> can be released. The package builder picks one; "
+                        "it doesn't have to be the latest." if accp
+                        else html_chip("No recent run has passed ACCP", "amber"))
+                if missing:
+                    hint += " &nbsp;<i>Selecting is available once all checks pass.</i>"
+                out += (f"<p>{hint}{reload}</p><table cellspacing='0' cellpadding='3'>{head}{rows}</table>")
+            out += self._tpa_selection_html(entry, component, pick, busy)
+        return out
+
+    def _tpa_selection_html(self, entry: MigrationEntry, component, pick, busy: bool) -> str:
+        if busy and pick is None:
+            return "<p>" + html_chip("Finding the commits since the previous PROD release\u2026", "amber") + "</p>"
+        if isinstance(pick, str):
+            return "<p>" + html_chip("Couldn't get the commits", "red") + f" &nbsp;{html.escape(pick)}</p>"
+        if not isinstance(pick, ReleaseCommits):
+            return ""
+        count = len(pick.commits)
+        pairs = [("Release", f"<b>#{html.escape(pick.run.number)}</b> \u00b7 commit {html.escape(pick.run.commit[:8])}"),
+                 ("Previous PROD release", f"{html.escape(pick.baseline)} \u00b7 commit "
+                                           f"{html.escape(pick.baseline_commit[:8])}"),
+                 ("Commits to migrate", html_chip(f"{count} commit{'s' if count != 1 else ''}",
+                                                  "blue" if count else "slate"))]
+        for note in pick.notes:
+            pairs.append(("Note", html_chip(note, "amber")))
+        url = self._list_url(entry)
+        key = (entry.key, component.key)
+        if count:
+            links = [f"<a href='action:tpa-copy/{component.key}'>Copy commits</a>"]
+            if busy:
+                links.append(html_chip("Writing to the migration list\u2026", "amber"))
+            elif url:
+                links.append(f"<a href='action:tpa-write/{component.key}'>Write to {html.escape(component.sheet)}</a>")
+            else:
+                links.append("<i>no migration list link (_migration.url) in the migration folder</i>")
+            pairs.append(("Actions", " &nbsp;\u00b7&nbsp; ".join(links)))
+        write = self._tpa_writes.get(key)
+        if isinstance(write, str):
+            pairs.append(("Migration list", html_chip("Couldn't write", "red") + f" &nbsp;{html.escape(write)}"))
+        elif isinstance(write, ListWrite):
+            sheet = write.sheets[0]
+            text = (f"added {len(sheet.added)} to {sheet.sheet} (rows {sheet.first_row}\u2013{sheet.last_row})"
+                    if sheet.added else f"nothing new on {sheet.sheet}")
+            if sheet.skipped:
+                text += f", {len(sheet.skipped)} already listed"
+            pairs.append(("Migration list", html_chip(text, "green" if sheet.added else "slate")
+                          + " &nbsp;Check it in Excel; AutoSave may already have saved it."))
+        cells = "".join(
+            f"<tr><td>{html.escape(c.id)}</td><td>{html.escape(c.author)}</td>"
+            f"<td>{html.escape(c.date.strftime('%m/%d/%Y %I:%M %p') if c.date else '')}</td>"
+            f"<td>{html.escape(c.message)}</td></tr>" for c in pick.commits)
+        table = ("<table cellspacing='0' cellpadding='3'><tr><td class='k'>ID</td><td class='k'>Author</td>"
+                 f"<td class='k'>Date</td><td class='k'>Message</td></tr>{cells}</table>") if cells else ""
+        return _rows(pairs) + table
+
+    def _tpa_component(self, key: str):
+        return next((c for c in TPA_COMPONENTS if c.key == key), None)
+
+    def _tpa_select(self, component_key: str, run_id: int) -> None:
+        card = self.selected
+        component = self._tpa_component(component_key)
+        listed = self._tpa_lists.get(component_key)
+        if card is None or card.entry is None or component is None or not isinstance(listed, ReleaseList):
+            return
+        run = next((r for r in listed.runs if r.id == run_id), None)
+        key = (card.entry.key, component_key)
+        if run is None or not run.accp_ok or key in self._tpa_busy or self._change_missing(card.entry):
+            return
+        if not self._confirm_builder(card.entry):
+            return
+        answer = QMessageBox.question(
+            self, f"Release {component.title}",
+            f"Release run #{run.number} (commit {run.commit[:8]}) of {listed.pipeline} to PROD?\n\n"
+            "Its ACCP stage succeeded. The commits since the previous PROD release will be listed for the "
+            "migration list.")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._tpa_busy.add(key)
+        self._tpa_selected.pop(key, None)
+        self._tpa_writes.pop(key, None)
+
+        def done(result: ReleaseCommits) -> None:
+            self._tpa_busy.discard(key)
+            self._tpa_selected[key] = result
+            self._status(f"{component.title} #{run.number}: {len(result.commits)} commits since "
+                         f"{result.baseline}.", "ok")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        def failed(error: str) -> None:
+            self._tpa_busy.discard(key)
+            self._tpa_selected[key] = error
+            self._status(f"Couldn't get the {component.title} commits: {error}", "error")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run(f"Finding {component.title} commits for #{run.number}\u2026",
+                  lambda: TpaClient().release_commits(component, run), done, failed)
+        self._refresh_details(card)
+
+    @staticmethod
+    def _excel_date(value) -> str:
+        if value is None:
+            return ""
+        return f"{value.month}/{value.day}/{value.year} {value.strftime('%I').lstrip('0')}:{value:%M:%S %p}"
+
+    def _tpa_copy(self, component_key: str) -> None:
+        card = self.selected
+        pick = self._tpa_selected.get((card.entry.key, component_key)) if card and card.entry else None
+        if not isinstance(pick, ReleaseCommits) or not pick.commits:
+            return
+        text = "\r\n".join("\t".join((c.id, c.author, self._excel_date(c.date), c.message.replace("\t", " ")))
+                           for c in pick.commits)
+        QApplication.clipboard().setText(text)
+        self._status(f"Copied {len(pick.commits)} commits (ID, Author, Date, Message) - paste into column A.", "ok")
+
+    def _tpa_write(self, component_key: str) -> None:
+        card = self.selected
+        component = self._tpa_component(component_key)
+        if card is None or card.entry is None or component is None:
+            return
+        key = (card.entry.key, component_key)
+        pick = self._tpa_selected.get(key)
+        url = self._list_url(card.entry)
+        if not isinstance(pick, ReleaseCommits) or not pick.commits or not url or key in self._tpa_busy:
+            return
+        answer = QMessageBox.question(
+            self, "Write to migration list",
+            f"Add {len(pick.commits)} commits of #{pick.run.number} to {component.sheet} in "
+            f"{workbook_name(url)}?\n\nCommits already on the sheet are skipped. Excel opens the workbook and "
+            "leaves it open for you to check; AutoSave may save the changes right away.")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        rows = [ListRow(c.id, c.author, c.date, c.message) for c in pick.commits]
+        self._tpa_busy.add(key)
+
+        def done(result: ListWrite) -> None:
+            self._tpa_busy.discard(key)
+            self._tpa_writes[key] = result
+            added = sum(len(s.added) for s in result.sheets)
+            self._status(f"Added {added} commits to {component.sheet}.", "ok")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        def failed(error: str) -> None:
+            self._tpa_busy.discard(key)
+            self._tpa_writes[key] = error
+            self._status(f"Couldn't write the migration list: {error}", "error")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run(f"Writing to {component.sheet}\u2026", lambda: write_changesets(url, {component.sheet: rows}),
+                  done, failed)
+        self._refresh_details(card)
+
+    # ---------- 3 days before: migration list and code freeze emails ----------
+    @staticmethod
+    def _sprint(card: MigrationCard) -> str:
+        """Sprint used in the migration list subject: the ADO ticket's sprint, one ahead of the schedule's."""
+        found = re.search(r"Sprint (\d+)", card.ticket.iteration_path) if card.ticket else None
+        return found[1] if found else ""
+
+    def _email_blocker(self, card: MigrationCard, kind: str, missing: list[str]) -> str:
+        entry = card.entry
+        if missing:
+            return "Not ready - see Tasks above."
+        if kind == MIGRATION_LIST and not self._list_url(entry):
+            return "No migration list link (_migration.url) in the migration folder."
+        if kind == CODE_FREEZE and entry.code_freeze is None:
+            return "No code freeze date in the schedule."
+        return ""
+
+    def _emails_html(self, card: MigrationCard, missing: list[str]) -> str:
+        entry = card.entry
+        result = self._changes.get(entry.key)
+        sent = result.sent if isinstance(result, ChangeLookup) else {}
+        sprint = self._sprint(card) or "?"
+        subjects = {MIGRATION_LIST: list_subject(entry.prod_date, sprint),
+                    CODE_FREEZE: "UniFi ACCP Refresh and Code Freeze"}
+        notes = {MIGRATION_LIST: "Asks the team to review the migration list; links to "
+                                 + (html.escape(workbook_name(self._list_url(entry))) or "the list") + ".",
+                 CODE_FREEZE: "Code freeze at 5:00 AM Pacific " + html.escape(
+                     f"{entry.code_freeze:%A %b %d, %Y}" if entry.code_freeze else "(no date)")
+                     + f", in effect until PROD on {html.escape(f'{entry.prod_date:%A %b %d, %Y}')}."}
+        rows = []
+        for kind in KINDS:
+            found = sent.get(kind.id)
+            if found is not None:
+                status = (html_chip(f"Already sent {found.when:%a %b %d, %I:%M %p}", "green")
+                          + f" &nbsp;in {html.escape(found.folder)} &nbsp;<a href='action:open-sent/{kind.id}'>Open</a>")
+            elif f"{entry.key}|{kind.id}" in self._drafting:
+                status = html_chip("Opening in Outlook\u2026", "amber")
+            else:
+                blocker = self._email_blocker(card, kind.id, missing)
+                status = (html_chip("Not sent", "slate") + " &nbsp;" + (
+                    f"<i>{html.escape(blocker)}</i>" if blocker
+                    else f"<a href='action:draft-email/{kind.id}'>Draft email</a>"))
+            subject = found.subject if found is not None else subjects[kind.id]
+            rows.append((kind.title, f"{status}<br><b>{html.escape(subject)}</b><br>{notes[kind.id]}"))
+        return ("<h4>Emails</h4>" + _rows(rows)
+                + "<p>Drafts open in Outlook from the team's templates for you to review and send. Emails already "
+                  "in your Inbox or Sent Items for this migration aren't drafted again; use <b>Check email again</b> "
+                  "after sending.</p>")
+
+    def _draft_email(self, kind: str) -> None:
+        card = self.selected
+        if card is None or card.entry is None:
+            return
+        entry = card.entry
+        result = self._changes.get(entry.key)
+        key = f"{entry.key}|{kind}"
+        if not isinstance(result, ChangeLookup) or key in self._drafting:
+            return
+        if result.sent.get(kind) is not None:
+            self._status("That email was already sent for this migration.", "info")
+            return
+        blocker = self._email_blocker(card, kind, self._change_missing(entry))
+        if blocker:
+            self._status(blocker, "error")
+            return
+        templates = self.settings.email_templates
+        if kind == MIGRATION_LIST:
+            sprint = self._sprint(card)
+            if not sprint:
+                sprint, ok = QInputDialog.getText(self, "Migration list email",
+                                                  "Sprint number for the subject (the ADO ticket has none):")
+                sprint = sprint.strip()
+                if not ok or not sprint:
+                    return
+            url = self._list_url(entry)
+            build = lambda: migration_list_draft(templates, entry.prod_date, sprint, url)  # noqa: E731
+        else:
+            holidays, today = self.settings.holidays, date.today()
+            build = lambda: code_freeze_draft(templates, entry.prod_date, entry.code_freeze, today, holidays)  # noqa: E731
+        self._drafting.add(key)
+
+        def done(_result) -> None:
+            self._drafting.discard(key)
+            self._status("Review the email in Outlook and click Send, then click Check email again.", "ok")
+            if card is self.selected:
+                self._refresh_details(card)
+
+        def failed(error: str) -> None:
+            self._drafting.discard(key)
+            self._status(f"Couldn't open the email: {error}", "error")
+            QMessageBox.warning(self, "Email", error)
+            if card is self.selected:
+                self._refresh_details(card)
+
+        self._run("Opening the email in Outlook\u2026", lambda: show_draft(build()), done, failed)
+        self._refresh_details(card)
+
+    def _open_sent(self, kind: str) -> None:
+        card = self.selected
+        result = self._changes.get(card.entry.key) if card is not None and card.entry is not None else None
+        found = result.sent.get(kind) if isinstance(result, ChangeLookup) else None
+        if found is not None:
+            self._run("Opening the email in Outlook\u2026", lambda: open_email(found.entry_id, found.store_id),
+                      lambda _r: None)
+
+    def _open_change_item(self, action: str) -> None:
+        card = self.selected
+        result = self._changes.get(card.entry.key) if card is not None and card.entry is not None else None
+        if not isinstance(result, ChangeLookup):
+            return
+        if action == "open-email" and result.email is not None:
+            email = result.email
+            self._run("Opening the email in Outlook\u2026", lambda: open_email(email.entry_id, email.store_id),
+                      lambda _r: None)
+            return
+        path = result.folder.path if action == "open-folder" else result.folder.proof_path
+        try:
+            open_path(path)
+        except OSError as exc:
+            self._status(f"Couldn't open {path}: {exc}", "error")
 
     def _confirm_builder(self, entry: MigrationEntry) -> bool:
         first = self.user_bar.first_name.lower()

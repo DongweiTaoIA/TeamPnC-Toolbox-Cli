@@ -37,3 +37,10 @@ class AppState:
     def set_ticket_id(self, key: str, ticket_id: int) -> None:
         self._migration(key)["ticket_id"] = ticket_id
         self._save()
+
+    def get_setting(self, name: str, default: str = "") -> str:
+        return self._data.get("settings", {}).get(name, default)
+
+    def set_setting(self, name: str, value: str) -> None:
+        self._data.setdefault("settings", {})[name] = value
+        self._save()
